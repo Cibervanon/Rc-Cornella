@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#121212">
+<title>Rugby Club Cornellà</title>
+<meta name="description" content="Gestión del club: convocatorias, confirmaciones, plantilla y cuotas.">
+<link rel="stylesheet" href="styles.css">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="RC Cornellà">
+<meta name="mobile-web-app-capable" content="yes">
+</head>
+<body>
+<div id="root"></div>
+
+<div id="sheetWrap" class="sheet-wrap hidden" onclick="if(event.target.id==='sheetWrap')closeSheet()">
+  <div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-hd">
+      <b id="sheetTitle"></b>
+      <button class="ibtn" onclick="closeSheet()" aria-label="Cerrar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div id="sheetBody" class="sheet-bd"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden" role="status"></div>
+
+<script src="js/icons.js"></script>
+<script src="js/store.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/gate.js"></script>
+<script src="js/coach.js"></script>
+<script src="js/family.js"></script>
+<script src="js/match.js"></script>
+<script src="js/board.js"></script>
+<script src="js/shell.js"></script>
+<script>
+/* Modo sin conexión: se registra en silencio y no molesta si falla. */
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
+window.addEventListener('online',  () => { if (window.Shell) Shell.conexion(true);  });
+window.addEventListener('offline', () => { if (window.Shell) Shell.conexion(false); });
+</script>
+</body>
+</html>

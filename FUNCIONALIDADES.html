@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RC Cornellà · Funcionalidades y estado del proyecto</title>
+<style>
+:root{
+  --ink:#121212; --accent:#E8590C; --accent-dk:#C2410C; --accent-bg:#FFF1E8;
+  --bg:#FAFAF9; --surface:#fff; --t1:#1A1A1A; --t2:#5C5C5C; --t3:#8A8A8A;
+  --line:#E4E2DF; --line2:#D6D3CF;
+  --ok:#15803D; --ok-bg:#EDF7F0; --warn:#A16207; --warn-bg:#FDF6E3;
+  --bad:#B42318; --bad-bg:#FDF0EE; --info:#1E5A8A; --info-bg:#EFF5FA;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--t1);
+  font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:940px;margin:0 auto;padding:0 20px 80px}
+
+/* cabecera */
+header{background:var(--ink);color:#fff;border-bottom:3px solid var(--accent);
+  padding:38px 20px 30px;margin-bottom:34px}
+.hin{max-width:940px;margin:0 auto;display:flex;gap:18px;align-items:center}
+header h1{margin:0;font-size:26px;letter-spacing:-.03em}
+header .est{font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--accent);font-weight:700;margin-top:4px}
+header p{margin:8px 0 0;color:rgba(255,255,255,.7);font-size:14.5px}
+
+h2{font-size:21px;letter-spacing:-.02em;margin:44px 0 6px;
+  padding-bottom:9px;border-bottom:2px solid var(--ink)}
+h2 .n{color:var(--accent);font-variant-numeric:tabular-nums}
+h3{font-size:16px;margin:26px 0 10px;letter-spacing:-.01em}
+h4{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--t3);
+  margin:22px 0 9px}
+p{margin:0 0 12px}
+.lead{color:var(--t2);font-size:14.5px;margin-bottom:20px}
+
+/* tablas */
+table{width:100%;border-collapse:collapse;margin:14px 0 18px;
+  background:var(--surface);border:1px solid var(--line);border-radius:8px;
+  overflow:hidden;font-size:14.5px}
+th{background:#F5F3F1;text-align:left;padding:10px 13px;font-size:12px;
+  text-transform:uppercase;letter-spacing:.06em;color:var(--t2);
+  border-bottom:1px solid var(--line);font-weight:700}
+td{padding:11px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600}
+.nowrap{white-space:nowrap}
+
+/* listas de funciones */
+ul.fx{list-style:none;padding:0;margin:0 0 16px;
+  background:var(--surface);border:1px solid var(--line);border-radius:8px;
+  overflow:hidden}
+ul.fx li{padding:11px 14px;border-bottom:1px solid var(--line);
+  display:flex;gap:11px;align-items:flex-start;font-size:14.5px}
+ul.fx li:last-child{border-bottom:0}
+ul.fx li b{display:block;margin-bottom:1px}
+ul.fx li span{color:var(--t2);font-size:13.5px;line-height:1.45}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--accent);
+  flex:none;margin-top:8px}
+
+/* etiquetas */
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;
+  border-radius:4px;letter-spacing:.02em;white-space:nowrap;vertical-align:middle}
+.t-ok{background:var(--ok-bg);color:var(--ok)}
+.t-warn{background:var(--warn-bg);color:var(--warn)}
+.t-bad{background:var(--bad-bg);color:var(--bad)}
+.t-info{background:var(--info-bg);color:var(--info)}
+.t-mute{background:#F0EEEB;color:var(--t2)}
+
+/* cajas */
+.box{border:1px solid var(--line);border-left:3px solid var(--accent);
+  background:var(--surface);border-radius:0 8px 8px 0;padding:14px 16px;margin:16px 0}
+.box.ok{border-left-color:var(--ok);background:var(--ok-bg);border-color:#CFE8D8}
+.box.warn{border-left-color:var(--warn);background:var(--warn-bg);border-color:#EFE2C0}
+.box.bad{border-left-color:var(--bad);background:var(--bad-bg);border-color:#F2D4CF}
+.box b{display:block;margin-bottom:3px}
+.box p:last-child{margin-bottom:0}
+.box .small{font-size:13.5px;color:var(--t2)}
+
+/* métricas */
+.stats{display:flex;border:1px solid var(--line);border-radius:8px;
+  background:var(--surface);overflow:hidden;margin:18px 0}
+.stats div{flex:1;padding:15px 14px;border-right:1px solid var(--line)}
+.stats div:last-child{border-right:0}
+.stats b{display:block;font-size:25px;font-weight:700;letter-spacing:-.03em;
+  line-height:1.1}
+.stats span{font-size:12.5px;color:var(--t2)}
+
+code{background:#F0EEEB;padding:1px 6px;border-radius:4px;font-size:.87em;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.06em}
+
+/* índice */
+nav.toc{background:var(--surface);border:1px solid var(--line);border-radius:8px;
+  padding:16px 18px;margin-bottom:30px}
+nav.toc b{display:block;font-size:12px;text-transform:uppercase;
+  letter-spacing:.07em;color:var(--t3);margin-bottom:9px}
+nav.toc ol{margin:0;padding-left:20px;columns:2;column-gap:28px;font-size:14.5px}
+nav.toc li{margin-bottom:4px;break-inside:avoid}
+nav.toc a{color:var(--t1);text-decoration:none;border-bottom:1px solid var(--line2)}
+nav.toc a:hover{color:var(--accent-dk);border-color:var(--accent)}
+@media(max-width:620px){nav.toc ol{columns:1}.hin{flex-direction:column;
+  align-items:flex-start;text-align:left}}
+
+footer{margin-top:50px;padding-top:22px;border-top:1px solid var(--line);
+  color:var(--t3);font-size:13px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="hin">
+    <svg width="60" height="60" viewBox="0 0 64 64" aria-label="Escudo">
+      <rect x="1.5" y="1.5" width="61" height="61" rx="9" fill="#121212"
+            stroke="#E8590C" stroke-width="3"/>
+      <path id="cs" d="M32 13 50 20v14c0 10-8 15.6-18 18.6C22 49.6 14 44 14 34V20z"
+            fill="#fff"/>
+      <clipPath id="cc"><use href="#cs"/></clipPath>
+      <g clip-path="url(#cc)">
+        <rect x="14" y="13" width="4.5" height="42" fill="#C8102E"/>
+        <rect x="23" y="13" width="4.5" height="42" fill="#C8102E"/>
+        <rect x="32" y="13" width="4.5" height="42" fill="#C8102E"/>
+        <rect x="41" y="13" width="4.5" height="42" fill="#C8102E"/>
+        <rect x="14" y="13" width="36" height="42" fill="#FFD100" opacity=".55"
+              style="mix-blend-mode:multiply"/>
+      </g>
+      <path d="M32 13 50 20v14c0 10-8 15.6-18 18.6C22 49.6 14 44 14 34V20z"
+            fill="none" stroke="#121212" stroke-width="2.2"/>
+      <ellipse cx="32" cy="32" rx="11" ry="6.6" transform="rotate(-38 32 32)"
+               fill="#E8590C" stroke="#121212" stroke-width="2"/>
+      <path d="M28 36l8-8M29.8 31.4l1.8 1.8M32.4 28.8l1.8 1.8" stroke="#fff"
+            stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    <div>
+      <h1>Rugby Club Cornellà</h1>
+      <div class="est">Des de 1931</div>
+      <p>Funcionalidades de la aplicación y estado real del proyecto</p>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<nav class="toc">
+  <b>Contenido</b>
+  <ol>
+    <li><a href="#resumen">Resumen</a></li>
+    <li><a href="#acceso">Acceso y seguridad</a></li>
+    <li><a href="#junta">Junta directiva</a></li>
+    <li><a href="#entrenador">Entrenador</a></li>
+    <li><a href="#familia">Familia</a></li>
+    <li><a href="#jugador">Jugador</a></li>
+    <li><a href="#posiciones">Posiciones y plantilla</a></li>
+    <li><a href="#partido">Día de partido</a></li>
+    <li><a href="#datos">Datos y clasificaciones</a></li>
+    <li><a href="#transversal">Funciones transversales</a></li>
+    <li><a href="#privacidad">Privacidad</a></li>
+    <li><a href="#diseno">Decisiones de diseño</a></li>
+    <li><a href="#pruebas">Pruebas</a></li>
+    <li><a href="#repaso">Repaso: qué falta</a></li>
+    <li><a href="#prioridad">Orden recomendado</a></li>
+  </ol>
+</nav>
+
+<!-- ═══════════════ RESUMEN ═══════════════ -->
+<h2 id="resumen">Resumen</h2>
+<p class="lead">Aplicación de gestión para el club. Arranca completamente vacía:
+no hay ningún usuario, jugador ni evento precargado. Todo se crea cuando alguien
+funda el club y el resto se registra con los códigos que reparte la junta.</p>
+
+<div class="stats">
+  <div><b>4</b><span>Perfiles de usuario</span></div>
+  <div><b>26</b><span>Pantallas principales</span></div>
+  <div><b>131</b><span>Acciones interactivas</span></div>
+  <div><b>498</b><span>Comprobaciones en verde</span></div>
+</div>
+
+<table>
+  <tr><th>Aspecto</th><th>Estado</th></tr>
+  <tr><td>Funcionamiento</td><td>Abre <code>index.html</code>. Sin servidor ni instalación.</td></tr>
+  <tr><td>Almacenamiento</td><td><code>localStorage</code> del navegador <span class="tag t-warn">Local</span></td></tr>
+  <tr><td>Sin conexión</td><td>Funciona completa sin cobertura <span class="tag t-ok">Service worker</span></td></tr>
+  <tr><td>Convertible a APK</td><td>Sí, con los iconos ya generados. Ver <code>docs/EJECUTAR.md</code> <span class="tag t-ok">Listo</span></td></tr>
+  <tr><td>Instalable</td><td>Sí, es una PWA. Se puede añadir a la pantalla de inicio.</td></tr>
+  <tr><td>Idioma</td><td>Español</td></tr>
+  <tr><td>Identidad visual</td><td>Negro, blanco y naranja del escudo real del club</td></tr>
+</table>
+
+<!-- ═══════════════ ACCESO ═══════════════ -->
+<h2 id="acceso">1 · Acceso y seguridad</h2>
+<p class="lead">El punto clave del sistema: <strong>nadie elige su rol</strong>.
+El perfil con el que entras lo determina el código que te han dado, y los códigos
+los reparte la junta directiva.</p>
+
+<h3>Fundación del club</h3>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Asistente de 3 pasos</b>
+    <span>Datos del club, categorías con sus cuotas, y cuenta del administrador</span></div></li>
+  <li><span class="dot"></span><div><b>Categorías editables</b>
+    <span>Vienen 7 propuestas (Sub-8 a Sénior). Se puede cambiar la cuota, quitar o añadir</span></div></li>
+  <li><span class="dot"></span><div><b>Protección contra duplicado</b>
+    <span>Una vez creado el club, nadie puede fundar otro encima</span></div></li>
+  <li><span class="dot"></span><div><b>Contenido inicial</b>
+    <span>Se crean 7 ejercicios de rugby y los 3 documentos obligatorios</span></div></li>
+</ul>
+
+<h3>Tipos de código</h3>
+<table>
+  <tr><th>Código</th><th>Quién lo genera</th><th>Alcance</th><th>Caducidad</th></tr>
+  <tr><td>Familias</td><td>Automático al fundar</td>
+    <td>Ilimitado. <strong>Solo da rol de familia</strong></td><td>No caduca</td></tr>
+  <tr><td>Entrenador</td><td>Solo la junta</td>
+    <td><strong>Un solo uso</strong>, nominal, con equipo opcional</td><td>30 días</td></tr>
+  <tr><td>Junta</td><td>Solo otro miembro de la junta</td>
+    <td><strong>Un solo uso</strong></td><td>30 días</td></tr>
+</table>
+
+<div class="box ok">
+  <b>Cómo se impide que alguien se registre como entrenador</b>
+  <p class="small">El código que circula por el grupo de padres solo abre la puerta
+  como familia. Para ser entrenador hace falta un código nominal, de un solo uso,
+  que caduca a los 30 días y que únicamente existe si alguien de la junta lo ha
+  generado para esa persona concreta. Está verificado con pruebas automáticas.</p>
+</div>
+
+<h3>Registro e inicio de sesión</h3>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>El código se valida antes de pedir datos</b>
+    <span>Nadie rellena un formulario entero para descubrir al final que no tiene acceso</span></div></li>
+  <li><span class="dot"></span><div><b>Validaciones</b>
+    <span>Formato de email, contraseña de 8 caracteres mínimo, email no duplicado</span></div></li>
+  <li><span class="dot"></span><div><b>Consentimiento explícito</b>
+    <span>Casilla de política de privacidad y confirmación de ser tutor legal</span></div></li>
+  <li><span class="dot"></span><div><b>Sesión persistente</b>
+    <span>No hace falta volver a entrar al cerrar el navegador</span></div></li>
+  <li><span class="dot"></span><div><b>Cambio de contraseña</b>
+    <span>Pide la actual y valida la nueva</span></div></li>
+  <li><span class="dot"></span><div><b>Multi-perfil</b>
+    <span>Quien tenga varios roles puede alternar entre ellos sin cerrar sesión</span></div></li>
+</ul>
+
+<!-- ═══════════════ JUNTA ═══════════════ -->
+<h2 id="junta">2 · Junta directiva</h2>
+
+<h4>Panel</h4>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Checklist de puesta en marcha</b>
+    <span>6 pasos con barra de progreso. Se muestra hasta que el club está operativo</span></div></li>
+  <li><span class="dot"></span><div><b>Siguiente acción sugerida</b>
+    <span>Explica qué toca y ofrece el botón directo para resolverlo</span></div></li>
+  <li><span class="dot"></span><div><b>Resumen del club</b>
+    <span>Deportistas, porcentaje de cuotas cobradas y cumplimiento LOPIVI</span></div></li>
+  <li><span class="dot"></span><div><b>Avisos automáticos</b>
+    <span>Entrenadores sin equipo asignado y técnicos sin certificado</span></div></li>
+  <li><span class="dot"></span><div><b>Estado por equipo</b>
+    <span>Jugadores, entrenador asignado y asistencia media</span></div></li>
+</ul>
+
+<h4>Personas</h4>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Cuerpo técnico</b>
+    <span>Listado con equipos asignados y estado del certificado</span></div></li>
+  <li><span class="dot"></span><div><b>Asignar equipos</b>
+    <span>Un entrenador puede llevar varias categorías. Al asignarlo recibe aviso</span></div></li>
+  <li><span class="dot"></span><div><b>Familias</b>
+    <span>Quién se ha registrado y cuántos deportistas ha inscrito</span></div></li>
+  <li><span class="dot"></span><div><b>Gestión de códigos</b>
+    <span>Activos y ya usados, con copia al portapapeles</span></div></li>
+</ul>
+
+<h4>Cuotas</h4>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Emisión mensual en un clic</b>
+    <span>Un recibo por deportista, con el descuento de hermanos ya aplicado</span></div></li>
+  <li><span class="dot"></span><div><b>Sin duplicados</b>
+    <span>No se puede emitir dos veces el mismo periodo</span></div></li>
+  <li><span class="dot"></span><div><b>Estados SEPA reales</b>
+    <span>Pendiente · En proceso · Pagado · Devuelto · Cobrado en mano · Sin domiciliar</span></div></li>
+  <li><span class="dot"></span><div><b>Filtros</b>
+    <span>Sin cobrar, en curso y cobrados</span></div></li>
+  <li><span class="dot"></span><div><b>Acciones sobre el recibo</b>
+    <span>Reintentar el cargo o registrar cobro en mano</span></div></li>
+</ul>
+
+<div class="box">
+  <b>Por qué los estados SEPA son así</b>
+  <p class="small">Un cargo domiciliado tarda unos <strong>6 días hábiles</strong> en
+  confirmarse, y puede devolverse hasta <strong>8 semanas</strong> después. Por eso
+  existe el estado «en proceso» y por eso la app avisa de que el saldo del mes no es
+  definitivo. Si la interfaz diera por cobrado lo que aún no lo está, el tesorero
+  descuadraría las cuentas.</p>
+</div>
+
+<h4>LOPIVI y configuración</h4>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Semáforo por técnico</b>
+    <span>Verde vigente, ámbar por renovar, rojo pendiente</span></div></li>
+  <li><span class="dot"></span><div><b>Registro de certificados</b>
+    <span>Estado, fecha de revisión y formación completada</span></div></li>
+  <li><span class="dot"></span><div><b>Requisitos del club</b>
+    <span>Delegado de protección, protocolo y formación del personal</span></div></li>
+  <li><span class="dot"></span><div><b>Categorías y cuotas</b>
+    <span>Crear categorías nuevas y ajustar el importe mensual</span></div></li>
+</ul>
+
+<!-- ═══════════════ ENTRENADOR ═══════════════ -->
+<h2 id="entrenador">3 · Entrenador</h2>
+<p class="lead">Diseñado alrededor de una idea: convocar y pasar lista tienen que
+costar tres toques. Si cuesta más, el entrenador vuelve al grupo de WhatsApp y se
+pierde el dato.</p>
+
+<h4>Hoy</h4>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Próximo evento destacado</b>
+    <span>Con el desglose van / no van / duda / sin responder</span></div></li>
+  <li><span class="dot"></span><div><b>Recordar solo a quien falta</b>
+    <span>Un botón único. No molesta a quien ya ha contestado</span></div></li>
+  <li><span class="dot"></span><div><b>Métricas del equipo</b>
+    <span>Asistencia media, lesionados y eventos próximos</span></div></li>
+  <li><span class="dot"></span><div><b>Parte de lesiones</b>
+    <span>Quién está de baja o en recuperación</span></div></li>
+  <li><span class="dot"></span><div><b>Tareas pendientes</b>
+    <span>Botiquín, transporte, material...</span></div></li>
+  <li><span class="dot"></span><div><b>Cambio entre equipos</b>
+    <span>Para quien lleva más de una categoría</span></div></li>
+</ul>
+
+<h4>Agenda y eventos</h4>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Crear evento</b>
+    <span>Entrenamiento, partido, torneo o reunión, con rival y condición de local</span></div></li>
+  <li><span class="dot"></span><div><b>Confirmación automática</b>
+    <span>Al crear el evento se pide a toda la plantilla y se avisa a las familias</span></div></li>
+  <li><span class="dot"></span><div><b>Hora de citación</b>
+    <span>Distinta de la hora de inicio, que es lo que realmente necesita la familia</span></div></li>
+  <li><span class="dot"></span><div><b>Notas para las familias</b>
+    <span>Qué traer, dónde aparcar, cualquier instrucción</span></div></li>
+  <li><span class="dot"></span><div><b>Historial</b>
+    <span>Eventos pasados con su registro de asistencia</span></div></li>
+</ul>
+
+<h4>Detalle del evento · tres pestañas</h4>
+<table>
+  <tr><th>Pestaña</th><th>Qué hace</th></tr>
+  <tr><td>Confirmaciones</td><td>Agrupadas <strong>empezando por los que no han
+    respondido</strong>, con el motivo de quien no puede ir</td></tr>
+  <tr><td>Convocatoria</td><td><strong>Preselecciona a quien ha confirmado</strong> y
+    marca a los lesionados. Al enviar, los convocados reciben aviso</td></tr>
+  <tr><td>Pasar lista</td><td>Cuatro botones por jugador: presente, tarde,
+    justificado, ausente. Más un botón de «todos presentes»</td></tr>
+</table>
+
+<h4>Plantilla y ficha del jugador</h4>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Orden por menor asistencia</b>
+    <span>Es como un entrenador detecta problemas antes de que sean graves</span></div></li>
+  <li><span class="dot"></span><div><b>Buscador</b>
+    <span>Filtrado en vivo por nombre</span></div></li>
+  <li><span class="dot"></span><div><b>Objetivos del jugador</b>
+    <span>Se marcan como logrados. El jugador y su familia los ven</span></div></li>
+  <li><span class="dot"></span><div><b>Valoración por estrellas</b>
+    <span>Técnica, físico, táctica y actitud, más fortalezas y puntos a mejorar</span></div></li>
+  <li><span class="dot"></span><div><b>Decisión de compartir</b>
+    <span>Cada valoración se comparte o se queda solo para el cuerpo técnico</span></div></li>
+  <li><span class="dot"></span><div><b>Notas privadas</b>
+    <span>Solo las ve su autor. Ni la familia, ni el jugador, ni otros entrenadores</span></div></li>
+  <li><span class="dot"></span><div><b>Lesiones</b>
+    <span>Tipo, zona, alta prevista y alta médica</span></div></li>
+  <li><span class="dot"></span><div><b>Información médica visible</b>
+    <span>Alergias destacadas, para poder actuar en una urgencia</span></div></li>
+</ul>
+
+<h4>Sesiones de entrenamiento</h4>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Biblioteca de ejercicios</b>
+    <span>7 ejercicios de rugby con objetivo, desarrollo, material y duración</span></div></li>
+  <li><span class="dot"></span><div><b>Ejercicios propios</b>
+    <span>El entrenador añade los suyos a la biblioteca</span></div></li>
+  <li><span class="dot"></span><div><b>Montar y reutilizar sesiones</b>
+    <span>Se eligen ejercicios y se calcula la duración total</span></div></li>
+</ul>
+
+<h4>Comunicación</h4>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Avisos al equipo</b>
+    <span>Con opción de marcar como urgente. Llegan a todas las familias</span></div></li>
+  <li><span class="dot"></span><div><b>Tareas del equipo</b>
+    <span>Lista compartida de pendientes logísticos</span></div></li>
+  <li><span class="dot"></span><div><b>Alerta de su propio certificado</b>
+    <span>Le recuerda que debe entregarlo a la junta</span></div></li>
+</ul>
+
+<!-- ═══════════════ FAMILIA ═══════════════ -->
+<h2 id="familia">4 · Familia</h2>
+<p class="lead">Lo primero que ve es lo que falta por responder. Confirmar no
+requiere abrir el evento.</p>
+
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Confirmación desde el inicio</b>
+    <span>Tres botones grandes: Va · Duda · No va. Sin navegar a ningún sitio</span></div></li>
+  <li><span class="dot"></span><div><b>Aviso de urgencia</b>
+    <span>Cuando quedan menos de dos días se destaca</span></div></li>
+  <li><span class="dot"></span><div><b>Motivo opcional al decir que no</b>
+    <span>Lesión, enfermedad, estudios, viaje... ayuda al entrenador a organizarse</span></div></li>
+  <li><span class="dot"></span><div><b>Varios hijos a la vez</b>
+    <span>Los pendientes de todos aparecen juntos, identificados por nombre</span></div></li>
+  <li><span class="dot"></span><div><b>Inscripción de deportista</b>
+    <span>Nombre, fecha, categoría, talla, posición e información médica</span></div></li>
+  <li><span class="dot"></span><div><b>Descuento automático de hermanos</b>
+    <span>15 % a partir del segundo hijo, aplicado solo</span></div></li>
+  <li><span class="dot"></span><div><b>Firma de documentación</b>
+    <span>Imagen, RGPD y ficha médica, con registro de fecha y hora</span></div></li>
+  <li><span class="dot"></span><div><b>Domiciliación de la cuota</b>
+    <span>Con validación de IBAN. Se guarda enmascarado, nunca completo</span></div></li>
+  <li><span class="dot"></span><div><b>Agenda y detalle del evento</b>
+    <span>Citación, lugar, notas del entrenador y si está convocado</span></div></li>
+  <li><span class="dot"></span><div><b>Quién va</b>
+    <span>Nombres de los compañeros que han confirmado</span></div></li>
+  <li><span class="dot"></span><div><b>Progreso del hijo</b>
+    <span>Asistencia, objetivos y las valoraciones que el entrenador ha compartido</span></div></li>
+  <li><span class="dot"></span><div><b>Cuotas y estado del recibo</b>
+    <span>Con explicación de los 6 días hábiles de confirmación bancaria</span></div></li>
+</ul>
+
+<div class="box">
+  <b>El lenguaje de las valoraciones</b>
+  <p class="small">La familia no ve «Técnica: 3/5» a secas, sino bloques titulados
+  «Lo que hace bien» y «En qué seguir trabajando». Es la misma información en un
+  marco que no desanima a un niño de once años.</p>
+</div>
+
+<!-- ═══════════════ JUGADOR ═══════════════ -->
+<h2 id="jugador">5 · Jugador</h2>
+<p class="lead">Misma estructura que familia, pero solo se ve a sí mismo y sin la
+parte económica.</p>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Confirma su propia asistencia</b>
+    <span>Sin depender de que lo haga un adulto</span></div></li>
+  <li><span class="dot"></span><div><b>Sus objetivos y su progreso</b>
+    <span>Con el porcentaje de objetivos logrados</span></div></li>
+  <li><span class="dot"></span><div><b>Su equipo</b>
+    <span>Compañeros y cuerpo técnico, sin contactos de otras familias</span></div></li>
+  <li><span class="dot"></span><div><b>Sin acceso económico</b>
+    <span>No ve recibos, cuotas ni documentación</span></div></li>
+</ul>
+
+<!-- ═══════════════ POSICIONES ═══════════════ -->
+<h2 id="posiciones">6 · Posiciones, puestos y grupos</h2>
+<p class="lead">La numeración es la oficial del rugby union: del 1 al 8 los
+delanteros, del 9 al 15 los tres cuartos. Cada puesto lleva su número real, su
+línea y su función.</p>
+
+<h3>Los quince puestos</h3>
+<table>
+  <tr><th>Nº</th><th>Puesto</th><th>Línea</th><th>Grupo</th></tr>
+  <tr><td>1</td><td>Pilar izquierdo</td><td>Primera línea</td><td>Delantera</td></tr>
+  <tr><td>2</td><td>Talonador</td><td>Primera línea</td><td>Delantera</td></tr>
+  <tr><td>3</td><td>Pilar derecho</td><td>Primera línea</td><td>Delantera</td></tr>
+  <tr><td>4 y 5</td><td>Segunda línea</td><td>Segunda línea</td><td>Delantera</td></tr>
+  <tr><td>6</td><td>Ala ciego</td><td>Tercera línea</td><td>Delantera</td></tr>
+  <tr><td>7</td><td>Ala abierto</td><td>Tercera línea</td><td>Delantera</td></tr>
+  <tr><td>8</td><td>Número 8</td><td>Tercera línea</td><td>Delantera</td></tr>
+  <tr><td>9</td><td>Medio melé</td><td>Bisagra</td><td>Tres cuartos</td></tr>
+  <tr><td>10</td><td>Apertura</td><td>Bisagra</td><td>Tres cuartos</td></tr>
+  <tr><td>11 y 14</td><td>Alas</td><td>Alas</td><td>Tres cuartos</td></tr>
+  <tr><td>12</td><td>Primer centro</td><td>Centros</td><td>Tres cuartos</td></tr>
+  <tr><td>13</td><td>Segundo centro</td><td>Centros</td><td>Tres cuartos</td></tr>
+  <tr><td>15</td><td>Zaguero</td><td>Zaguero</td><td>Tres cuartos</td></tr>
+</table>
+
+<div class="box">
+  <b>Solo XV y VII</b>
+  <p class="small">Se han eliminado las formaciones intermedias. En sevens son
+  <strong>tres delanteros</strong> (dos pilares y un talonador) y <strong>cuatro
+  tres cuartos</strong> (medio melé, apertura, centro y ala). No lleva zaguero: en
+  sevens los dorsales tampoco van ligados al puesto, por eso el campo numera del
+  1 al 7 por orden de colocación.</p>
+</div>
+
+<h3>Etiquetar jugadores</h3>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Hasta cuatro puestos por jugador</b>
+    <span>El primero es el principal. Se eligen de una lista agrupada en delantera
+    y tres cuartos, con la función de cada uno explicada</span></div></li>
+  <li><span class="dot"></span><div><b>Grupo deducido automáticamente</b>
+    <span>Delantera, tres cuartos o polivalente, según los puestos marcados</span></div></li>
+  <li><span class="dot"></span><div><b>Aviso de los sin etiquetar</b>
+    <span>La plantilla avisa de cuántos faltan, porque sin puesto la alineación
+    automática y los recambios no funcionan bien</span></div></li>
+</ul>
+
+<h3>Sistema de encaje</h3>
+<p>Cada vez que hay que decidir si alguien puede cubrir un puesto, se calcula un
+nivel de encaje. Es lo que ordena las listas de candidatos y de recambios:</p>
+<table>
+  <tr><th>Nivel</th><th>Significado</th><th>Ejemplo</th></tr>
+  <tr><td>Su puesto</td><td>Está etiquetado justo en ese número</td>
+    <td>Un talonador para el 2</td></tr>
+  <tr><td>Misma línea</td><td>Comparte línea con el puesto</td>
+    <td>Un pilar para el talonador: los dos son primera línea</td></tr>
+  <tr><td>Mismo grupo</td><td>Delantero o tres cuartos, pero otra línea</td>
+    <td>Un número 8 cubriendo de segunda línea</td></tr>
+  <tr><td>Fuera de puesto</td><td>Grupo distinto</td>
+    <td>Un ala jugando de pilar</td></tr>
+</table>
+
+<h3>Filtros y clasificación de la plantilla</h3>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Ver solo delantera o solo tres cuartos</b>
+    <span>Tanto en la plantilla como al elegir a quién convocar</span></div></li>
+  <li><span class="dot"></span><div><b>Filtro de sin etiquetar</b>
+    <span>Aparece solo cuando queda alguien por asignar</span></div></li>
+  <li><span class="dot"></span><div><b>Orden por menor asistencia o más minutos</b>
+    <span>Dos formas distintas de detectar problemas</span></div></li>
+  <li><span class="dot"></span><div><b>Cobertura de puestos</b>
+    <span>Los 15 números con cuántos especialistas hay para cada uno, y aviso de
+    los que no tienen a nadie</span></div></li>
+</ul>
+
+<h3>Grupos A y B dentro de una categoría</h3>
+<p>Una categoría puede tener varios equipos: por ejemplo un grupo de rendimiento
+y otro de promoción. Comparten categoría y cuota, pero tienen plantilla y
+convocatorias propias.</p>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Crear grupos desde la junta</b>
+    <span>Al añadir el B, el equipo existente pasa a llamarse A automáticamente</span></div></li>
+  <li><span class="dot"></span><div><b>Subir y bajar jugadores</b>
+    <span>Desde su ficha, conservando historial, asistencia y valoraciones</span></div></li>
+  <li><span class="dot"></span><div><b>Plantel ampliado al convocar</b>
+    <span>El entrenador del A ve también a los del B, marcados con su grupo de
+    origen, y puede subirlos para un partido concreto</span></div></li>
+  <li><span class="dot"></span><div><b>Sin dobles convocatorias</b>
+    <span>Si alguien ya está alineado con su grupo ese mismo día, aparece
+    bloqueado con el aviso de con quién juega. La alineación automática también
+    lo salta</span></div></li>
+</ul>
+
+<!-- ═══════════════ DÍA DE PARTIDO ═══════════════ -->
+<h2 id="partido">7 · Día de partido</h2>
+<p class="lead">Un módulo completo para el sábado. Tres pestañas —Alineación,
+En juego y Resumen— pensadas para un entrenador que está de pie, con frío y
+mirando al campo: cada acción cabe en dos toques y los objetivos son grandes.</p>
+
+<h3>Alineación sobre el campo</h3>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Campo de rugby dibujado</b>
+    <span>Con líneas de ensayo, de 22, medio campo y postes. En vertical, con la
+    delantera abajo y los tres cuartos arriba, que es como lo dibuja cualquier
+    entrenador en la pizarra</span></div></li>
+  <li><span class="dot"></span><div><b>Dos formaciones oficiales</b>
+    <span>XV y VII. Se elige sola según la categoría, y al cambiarla nadie se
+    pierde: quien se queda sin hueco pasa al banquillo</span></div></li>
+  <li><span class="dot"></span><div><b>Dorsales en su sitio</b>
+    <span>Cada hueco lleva el número real de la posición: el 9 es medio melé, el
+    10 apertura, el 15 zaguero</span></div></li>
+  <li><span class="dot"></span><div><b>Delantera y tres cuartos diferenciados</b>
+    <span>Por color, para leer la estructura de un vistazo</span></div></li>
+  <li><span class="dot"></span><div><b>Rellenar solo por encaje</b>
+    <span>Coloca primero a los especialistas de cada puesto, luego a los de la
+    misma línea y por último a los del mismo grupo. Descarta lesionados, a quien
+    ha dicho que no va y a quien juega con otro grupo ese día</span></div></li>
+  <li><span class="dot"></span><div><b>Candidatos ordenados al tocar un hueco</b>
+    <span>Con la función del puesto explicada arriba y cada jugador etiquetado
+    con su nivel de encaje</span></div></li>
+  <li><span class="dot"></span><div><b>Tres listas separadas</b>
+    <span>En el campo, banquillo y disponibles, con el estado de confirmación
+    de cada uno</span></div></li>
+  <li><span class="dot"></span><div><b>Sin duplicados</b>
+    <span>Colocar a alguien lo retira automáticamente de donde estuviera</span></div></li>
+</ul>
+
+<h3>En juego</h3>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Marcador y cronómetro en directo</b>
+    <span>Con las dos partes, el descanso y un indicador de partido en curso</span></div></li>
+  <li><span class="dot"></span><div><b>Corregir el minuto</b>
+    <span>El árbitro para el reloj y tú no. Se ajusta en dos toques</span></div></li>
+  <li><span class="dot"></span><div><b>Cuatro botones grandes</b>
+    <span>Punto nuestro · Punto rival · Cambio · Tarjeta</span></div></li>
+  <li><span class="dot"></span><div><b>Anotación completa de rugby</b>
+    <span>Ensayo (5), transformación (2), golpe de castigo (3), drop (3) y ensayo
+    de castigo (7), con el autor</span></div></li>
+  <li><span class="dot"></span><div><b>Cambios en dos pasos, con recambios ordenados</b>
+    <span>Quién sale y quién entra. El banquillo se ordena por quién encaja mejor
+    en el puesto que queda libre, mostrando además los minutos que ya lleva cada
+    uno. Se registra con su minuto exacto</span></div></li>
+  <li><span class="dot"></span><div><b>Atajo desde el jugador</b>
+    <span>Tocando a alguien del campo: sustituir, tarjeta o anotar, sin volver
+    atrás</span></div></li>
+  <li><span class="dot"></span><div><b>Tarjetas amarilla y roja</b>
+    <span>La roja corta el cómputo de minutos de ese jugador</span></div></li>
+  <li><span class="dot"></span><div><b>Cronología en vivo</b>
+    <span>Las últimas acciones visibles sin salir de la pantalla</span></div></li>
+</ul>
+
+<h3>Resumen del partido</h3>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Resultado y marcador</b>
+    <span>Victoria, derrota o empate, con el desglose</span></div></li>
+  <li><span class="dot"></span><div><b>Anotadores</b>
+    <span>Quién marcó, cuántos ensayos y cuántos puntos</span></div></li>
+  <li><span class="dot"></span><div><b>Cronología completa y editable</b>
+    <span>Se puede borrar cualquier acción y el marcador y los minutos se
+    recalculan solos</span></div></li>
+  <li><span class="dot"></span><div><b>Minutos por jugador</b>
+    <span>Calculados a partir de los cambios, con barra de proporción. Es el dato
+    que más reclaman las familias en categorías de formación</span></div></li>
+  <li><span class="dot"></span><div><b>Publicar el resultado</b>
+    <span>Genera el texto con el marcador y los ensayadores y lo envía a las
+    familias en un toque</span></div></li>
+  <li><span class="dot"></span><div><b>Acumulado de temporada</b>
+    <span>Partidos, minutos, ensayos y tarjetas de cada jugador, visible en su
+    ficha y en su perfil</span></div></li>
+</ul>
+
+<div class="box">
+  <b>Qué ve la familia</b>
+  <p class="small">Una versión de solo lectura: marcador, cronología, alineación y
+  un bloque destacado con los minutos que jugó su hijo, su posición y su dorsal.
+  No puede editar el acta. Si no participó, se le dice claramente en vez de
+  dejarlo en blanco.</p>
+</div>
+
+<h3>Cómo se calculan los minutos</h3>
+<p>No se guardan a mano: se reconstruyen desde la cronología. El sistema deshace
+los cambios hacia atrás para saber quién empezó de titular, y a partir de ahí suma
+los tramos de cada jugador entre que entra y sale. Una tarjeta roja corta su
+cómputo. Por eso borrar una acción recalcula todo automáticamente y nunca aparece
+un minuto negativo.</p>
+
+<!-- ═══════════════ DATOS ═══════════════ -->
+<h2 id="datos">8 · Datos del jugador y clasificaciones</h2>
+
+<h3>Ficha física</h3>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Peso, altura y pie dominante</b>
+    <span>Con el índice de masa corporal calculado. En categorías por debajo de
+    Sub-16 la app avisa de que son datos orientativos y no deben usarse para
+    comparar ni seleccionar</span></div></li>
+  <li><span class="dot"></span><div><b>Pruebas físicas configurables</b>
+    <span>El club arranca con seis propuestas (sentadilla, press banca, peso
+    muerto, dominadas, sprint de 40 m y test Yo-Yo), pero se pueden borrar,
+    renombrar, reordenar y crear las vuestras</span></div></li>
+  <li><span class="dot"></span><div><b>Solo se anota lo que hacéis</b>
+    <span>En la ficha aparecen únicamente las pruebas con marca registrada. Si
+    solo hacéis tres, solo ves tres</span></div></li>
+  <li><span class="dot"></span><div><b>Histórico de cada marca</b>
+    <span>Al anotar una nueva se guarda la anterior y la app indica cuánto ha
+    mejorado</span></div></li>
+  <li><span class="dot"></span><div><b>Posición en el equipo</b>
+    <span>Cada prueba define si gana el valor más alto o el más bajo, así que un
+    sprint se ordena al revés que una sentadilla</span></div></li>
+  <li><span class="dot"></span><div><b>Historial de asistencia detallado</b>
+    <span>Porcentaje, desglose por tipo (presente, tarde, justificado, ausente) y
+    las doce últimas sesiones una a una</span></div></li>
+</ul>
+
+<h3>Clasificaciones del equipo</h3>
+<p>Cinco tablas, cada una con contexto en la fila para que el número signifique
+algo. Solo aparecen las que tienen datos:</p>
+<table>
+  <tr><th>Clasificación</th><th>Qué muestra junto al número</th></tr>
+  <tr><td>Más asistencia</td><td>Sesiones acudidas sobre el total</td></tr>
+  <tr><td>Más minutos</td><td>En cuántos partidos los ha acumulado</td></tr>
+  <tr><td>Más ensayos</td><td>Sus puntos totales</td></tr>
+  <tr><td>Más puntos</td><td>Cuántos ensayos ha hecho</td></tr>
+  <tr><td>Más partidos</td><td>Minutos acumulados</td></tr>
+</table>
+<p>Y un bloque aparte con el ranking de cada prueba física, indicando cuántos
+jugadores del equipo tienen marca registrada en ella.</p>
+
+<h3>Configurar las pruebas del club</h3>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Añadir prueba propia</b>
+    <span>Nombre, unidad (kg, repeticiones, segundos, metros, centímetros,
+    minutos o puntos) y si gana el valor más bajo</span></div></li>
+  <li><span class="dot"></span><div><b>Editar y reordenar</b>
+    <span>Renombrar sin perder las marcas ya registradas, y cambiar el orden en
+    que aparecen</span></div></li>
+  <li><span class="dot"></span><div><b>Borrar con aviso</b>
+    <span>Antes de borrar te dice cuántos jugadores tienen marca en esa prueba.
+    Siempre debe quedar al menos una</span></div></li>
+  <li><span class="dot"></span><div><b>Quitar la marca de un jugador</b>
+    <span>Distinto de borrar la prueba: elimina solo su registro y la prueba
+    sigue existiendo para el resto</span></div></li>
+</ul>
+
+<h3>Estadística avanzada del equipo</h3>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Balance</b>
+    <span>Ganados, empatados y perdidos</span></div></li>
+  <li><span class="dot"></span><div><b>Ataque y defensa</b>
+    <span>Puntos a favor y en contra, diferencia, media por partido, ensayos y
+    porcentaje de transformaciones logradas</span></div></li>
+  <li><span class="dot"></span><div><b>Reparto de minutos</b>
+    <span>Cuántos de la plantilla han llegado a jugar. Si baja del 70% la app lo
+    señala, porque en formación conviene repartir</span></div></li>
+  <li><span class="dot"></span><div><b>Composición</b>
+    <span>Delanteros, tres cuartos y sin etiquetar</span></div></li>
+  <li><span class="dot"></span><div><b>Histórico de partidos</b>
+    <span>Con el resultado de cada uno y acceso directo a su acta</span></div></li>
+</ul>
+
+<h3>Qué ve la familia</h3>
+<p>En el progreso de su hijo: sus puestos, partidos jugados, minutos totales,
+media de minutos por partido, ensayos, puntos aportados y sus marcas físicas
+con la fecha. No ve las clasificaciones del equipo ni los datos de los demás.</p>
+
+<!-- ═══════════════ TRANSVERSAL ═══════════════ -->
+<h2 id="transversal">9 · Funciones transversales</h2>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Notificaciones internas</b>
+    <span>Convocatorias, avisos, valoraciones compartidas y objetivos nuevos.
+    Con contador en la cabecera</span></div></li>
+  <li><span class="dot"></span><div><b>Onboarding por rol</b>
+    <span>Al entrar por primera vez, tres pasos concretos según el perfil</span></div></li>
+  <li><span class="dot"></span><div><b>Estados vacíos que guían</b>
+    <span>Ninguna pantalla deja un hueco en blanco: explica qué falta y ofrece el botón</span></div></li>
+  <li><span class="dot"></span><div><b>Confirmación en acciones destructivas</b>
+    <span>Borrar un evento o los datos pide confirmación explícita</span></div></li>
+  <li><span class="dot"></span><div><b>Borrado en cascada</b>
+    <span>Eliminar un evento o un deportista limpia todo lo que cuelga de él</span></div></li>
+  <li><span class="dot"></span><div><b>Funciona sin conexión</b>
+    <span>Un service worker guarda la app en el dispositivo. En el campo, sin
+    cobertura, abre y funciona igual. Una barra avisa de que estás sin conexión y
+    de que todo se guarda en el móvil</span></div></li>
+  <li><span class="dot"></span><div><b>Instalable como aplicación</b>
+    <span>Se añade a la pantalla de inicio y se abre sin barra del navegador.
+    Convertible a APK sin tocar código</span></div></li>
+  <li><span class="dot"></span><div><b>Exportar a Excel</b>
+    <span>Listado completo con tutores, cuotas y asistencia, en CSV</span></div></li>
+  <li><span class="dot"></span><div><b>Copia de seguridad y restauración</b>
+    <span>Archivo con todo el club, para entregar a la junta entrante</span></div></li>
+  <li><span class="dot"></span><div><b>Cierre de temporada</b>
+    <span>Promociona a cada deportista a la categoría siguiente, con revisión uno
+    a uno antes de confirmar</span></div></li>
+  <li><span class="dot"></span><div><b>Escapado de HTML</b>
+    <span>Todo lo que escribe el usuario se escapa antes de pintarse</span></div></li>
+</ul>
+
+<!-- ═══════════════ PRIVACIDAD ═══════════════ -->
+<h2 id="privacidad">10 · Quién ve qué</h2>
+<table>
+  <tr><th>Dato</th><th>Entrenador</th><th>Familia</th><th>Jugador</th><th>Junta</th></tr>
+  <tr><td>Plantilla y asistencia</td><td>Solo su equipo</td><td>Solo sus hijos</td>
+    <td>Solo él</td><td>Todo</td></tr>
+  <tr><td>Datos económicos</td><td><span class="tag t-bad">No</span></td>
+    <td>Solo sus recibos</td><td><span class="tag t-bad">No</span></td><td>Todo</td></tr>
+  <tr><td>Contacto de otras familias</td><td><span class="tag t-bad">No</span></td>
+    <td><span class="tag t-bad">No</span></td><td><span class="tag t-bad">No</span></td>
+    <td>Sí</td></tr>
+  <tr><td>Valoraciones</td><td>Las de su equipo</td>
+    <td><strong>Solo las compartidas</strong></td><td>Solo las compartidas</td>
+    <td>Todas</td></tr>
+  <tr><td>Notas privadas</td><td><strong>Solo las suyas</strong></td>
+    <td><span class="tag t-bad">Nunca</span></td><td><span class="tag t-bad">Nunca</span></td>
+    <td><span class="tag t-bad">Nunca</span></td></tr>
+  <tr><td>Generar códigos</td><td><span class="tag t-bad">No</span></td>
+    <td><span class="tag t-bad">No</span></td><td><span class="tag t-bad">No</span></td>
+    <td>Sí</td></tr>
+</table>
+
+<!-- ═══════════════ DISEÑO ═══════════════ -->
+<h2 id="diseno">11 · Decisiones de diseño</h2>
+
+<h3>Identidad del club</h3>
+<p>Los colores salen del club real, no de una plantilla. El Rugby Club Cornellà se
+fundó en <strong>1931</strong> y su equipación oficial es camiseta negra con detalles
+blancos; el escudo combina el negro con borde naranja sobre franjas rojigualdas.</p>
+<table>
+  <tr><th>Color</th><th>Código</th><th>Uso</th></tr>
+  <tr><td>Negro</td><td class="mono">#121212</td><td>Cabecera, botones principales</td></tr>
+  <tr><td>Naranja</td><td class="mono">#E8590C</td><td>Único color de acento</td></tr>
+  <tr><td>Neutros cálidos</td><td class="mono">#FAFAF9 · #E4E2DF</td><td>Fondos y separadores</td></tr>
+</table>
+
+<h3>Lo que se evitó deliberadamente</h3>
+<table>
+  <tr><th>Patrón habitual en apps generadas</th><th>Qué se hizo aquí</th></tr>
+  <tr><td>Cinco colores saturados compitiendo</td>
+    <td>Un dominante, un acento, neutros. Nada más</td></tr>
+  <tr><td>Gradientes morados y glows decorativos</td>
+    <td>Ninguno. El único gradiente es el fondo de la pantalla de acceso</td></tr>
+  <tr><td><strong>Emoji como iconos de interfaz</strong></td>
+    <td>45 iconos SVG con trazo uniforme de 1.75 sobre rejilla de 24</td></tr>
+  <tr><td>Tarjeta dentro de tarjeta dentro de tarjeta</td>
+    <td>Una sola capa. Las métricas se separan por línea, sin caja propia</td></tr>
+  <tr><td>Todo redondeado a 16 px</td>
+    <td>Radios de 4, 8 y 12 según el peso del elemento</td></tr>
+  <tr><td>Copy vago de plantilla</td>
+    <td>Cada texto dice algo concreto y accionable</td></tr>
+</table>
+
+<h3>Accesibilidad</h3>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Áreas táctiles de 44 px como mínimo</b>
+    <span>El usuario medio tiene entre 40 y 65 años</span></div></li>
+  <li><span class="dot"></span><div><b>Cuerpo de texto de 16 px</b>
+    <span>Además evita el zoom automático de iOS en los formularios</span></div></li>
+  <li><span class="dot"></span><div><b>Etiquetas accesibles</b>
+    <span><code>aria-label</code> en los botones de icono, <code>aria-hidden</code>
+    en los decorativos</span></div></li>
+  <li><span class="dot"></span><div><b>Contraste AA</b>
+    <span>En texto, botones y etiquetas de estado</span></div></li>
+</ul>
+
+<!-- ═══════════════ PRUEBAS ═══════════════ -->
+<h2 id="pruebas">12 · Pruebas</h2>
+<p class="lead">Ejecutar con <code>node test.js</code>. Simulan cada perfil de
+principio a fin, no solo funciones sueltas.</p>
+
+<table>
+  <tr><th>#</th><th>Bloque</th><th>Qué verifica</th></tr>
+  <tr><td>1</td><td>Arranque en blanco</td><td>Sin usuarios, jugadores ni eventos precargados</td></tr>
+  <tr><td>2</td><td>Fundación</td><td>Validaciones y protección contra duplicado</td></tr>
+  <tr><td>3</td><td>Códigos</td><td>Inválidos, caducados, ya usados, y que el de familia nunca da más permisos</td></tr>
+  <tr><td>4</td><td>Entrenador</td><td>Alta, asignación de equipo, y que no puede crear códigos ni emitir cuotas</td></tr>
+  <tr><td>5</td><td>Familia</td><td>Inscripción de dos hermanos, descuento, documentos y mandato SEPA</td></tr>
+  <tr><td>6</td><td>Convocatoria</td><td>Ciclo completo desde crear evento hasta pasar lista</td></tr>
+  <tr><td>7</td><td>Privacidad</td><td>Valoraciones no compartidas y notas de otro entrenador</td></tr>
+  <tr><td>8</td><td>Jugador</td><td>Alcance limitado a su propia ficha</td></tr>
+  <tr><td>9</td><td>Cuotas</td><td>Emisión, descuento, no duplicar periodo, estados SEPA</td></tr>
+  <tr><td>10</td><td>LOPIVI</td><td>Certificados y técnicos sin equipo</td></tr>
+  <tr><td>11</td><td>Sesión</td><td>Credenciales inválidas y cambio de contraseña</td></tr>
+  <tr><td>12</td><td>Interfaz</td><td>Sin emoji, sin gradientes morados, táctil 44 px, colores del club</td></tr>
+  <tr><td>13</td><td>Robustez</td><td>Escapado de HTML y entidades inexistentes</td></tr>
+  <tr><td>14</td><td>Integridad</td><td>Referencias válidas y borrado en cascada</td></tr>
+  <tr><td>15</td><td>Huecos corregidos</td><td>Editar ficha, cambiar categoría, reprogramar evento, anular código, exportar</td></tr>
+  <tr><td>16</td><td>Día de partido</td><td>Formaciones, alineación, reloj, puntos, cambios con minuto, deshacer y cálculo de minutos</td></tr>
+  <tr><td>16b</td><td>Posiciones</td><td>Numeración oficial, XV y VII correctos, etiquetado y encaje</td></tr>
+  <tr><td>16c</td><td>Físico y clasificaciones</td><td>Marcas, rankings y estadística de equipo</td></tr>
+  <tr><td>16d</td><td>Grupos A y B</td><td>Creación, movimiento entre grupos y bloqueo de doble convocatoria</td></tr>
+  <tr><td>17</td><td>Cierre de temporada</td><td>Promoción de categoría y archivado</td></tr>
+  <tr><td>18</td><td>Partido completo</td><td>Convocatoria, alineación, dos partes, puntos, cambios, minutos y acta</td></tr>
+</table>
+
+<div class="box">
+  <b>El partido completo, paso a paso</b>
+  <p class="small">La prueba 18 simula un partido real de principio a fin: crea una
+  categoría limpia, inscribe 20 jugadores con puesto asignado, convoca, recoge 18
+  síes y un no, genera la alineación automática y comprueba que al menos 12 de los
+  15 quedan en su puesto o su línea. Luego juega: ensayo en el 8, transformación,
+  penal rival, tarjeta en el 22, cambio en el 25, descanso en el 35, segunda parte,
+  dos ensayos más y final en el 70. Verifica que el marcador queda 12-10, que quien
+  no fue sustituido acumula los 70 minutos, que el pilar cambiado en el 25 tiene
+  exactamente 25, y que borrar y volver a añadir una acción deja marcador y minutos
+  igual que estaban.</p>
+</div>
+
+<div class="box ok">
+  <b>498 comprobaciones en verde</b>
+  <p class="small">Las pruebas encontraron un fallo real durante el desarrollo: al
+  dar de baja a un deportista quedaba huérfana su inscripción. Se corrigió añadiendo
+  borrado en cascada.</p>
+</div>
+
+<!-- ═══════════════ REPASO ═══════════════ -->
+<h2 id="repaso">13 · Repaso: qué falta por pulir</h2>
+<p class="lead">Revisión honesta del estado real. Ordenado por gravedad.</p>
+
+<h3><span class="tag t-bad">Bloqueante</span> Antes de usarlo con datos reales</h3>
+
+<table>
+  <tr><th>Asunto</th><th>Situación</th></tr>
+  <tr><td>Datos solo en el navegador</td>
+    <td>Todo vive en <code>localStorage</code>. Cada persona tendría su propia copia
+    aislada: <strong>el entrenador no vería lo que hace la familia</strong>. Para uso
+    real hace falta un servidor. El esquema de base de datos con políticas de
+    seguridad ya está escrito de la versión anterior y es reutilizable.</td></tr>
+  <tr><td>Contraseñas</td>
+    <td>Se guardan con un hash simple, adecuado solo para prototipo. Un servicio de
+    autenticación real (bcrypt o equivalente) es imprescindible.</td></tr>
+  <tr><td>Recuperación de contraseña</td>
+    <td>La pantalla existe pero remite a contactar con la junta. Necesita envío de
+    email real.</td></tr>
+  <tr><td>Datos de menores</td>
+    <td>Antes de guardar información real de niños hacen falta: alojamiento en la UE,
+    contrato de encargado de tratamiento, política de privacidad publicada y copias
+    de seguridad con restauración probada.</td></tr>
+</table>
+
+<h3><span class="tag t-ok">Resuelto</span> Huecos que se han cerrado</h3>
+
+<table>
+  <tr><th>Qué faltaba</th><th>Cómo quedó</th></tr>
+  <tr><td>Dar de baja a un deportista</td>
+    <td>Botón en la ficha, con confirmación y borrado en cascada de asistencia,
+    valoraciones y recibos.</td></tr>
+  <tr><td>Cambiar de categoría</td>
+    <td>Desde la ficha, con la cuota actualizada automáticamente y el historial
+    conservado.</td></tr>
+  <tr><td>Editar la ficha</td>
+    <td>Nombre, fecha, dorsal, posición, talla e información médica.</td></tr>
+  <tr><td>Reprogramar un evento</td>
+    <td>Se edita todo sin perder las confirmaciones ya recibidas, y las familias
+    reciben aviso automático del cambio de horario.</td></tr>
+  <tr><td>Anular un código</td>
+    <td>Botón en la lista de códigos activos. El código general de familias no se
+    anula pero sí se puede regenerar.</td></tr>
+  <tr><td>La junta y las fichas</td>
+    <td>Nueva pestaña de deportistas con buscador, marcando a quien tiene
+    información médica.</td></tr>
+  <tr><td>Exportar datos</td>
+    <td>CSV del listado completo y copia de seguridad en un archivo, con
+    restauración.</td></tr>
+  <tr><td>Cierre de temporada</td>
+    <td>Asistente que propone la promoción de cada deportista y permite revisarla
+    uno a uno antes de confirmar.</td></tr>
+</table>
+
+<h3><span class="tag t-ok">Resuelto en esta versión</span></h3>
+<table>
+  <tr><th>Qué faltaba</th><th>Cómo quedó</th></tr>
+  <tr><td>Posiciones correctas</td>
+    <td>Numeración oficial verificada. El sevens se ha corregido: llevaba zaguero
+    y debe llevar ala. Eliminadas las formaciones de 10 y 5.</td></tr>
+  <tr><td>Etiquetar jugadores por puesto</td>
+    <td>Hasta cuatro puestos, con grupo deducido y sistema de encaje en cuatro
+    niveles.</td></tr>
+  <tr><td>Ver solo delantera o tres cuartos</td>
+    <td>Filtros en plantilla y en la lista de disponibles del partido.</td></tr>
+  <tr><td>Saber por quién cambiar</td>
+    <td>Los recambios se ordenan por encaje al puesto que queda libre, con los
+    minutos ya jugados de cada uno.</td></tr>
+  <tr><td>Datos físicos</td>
+    <td>Peso, altura, pie e IMC, más seis marcas de referencia con ranking.</td></tr>
+  <tr><td>Asistencia en el perfil</td>
+    <td>Porcentaje, desglose por tipo y las doce últimas sesiones.</td></tr>
+  <tr><td>Clasificaciones</td>
+    <td>Cinco tablas del equipo más el ranking de cada ejercicio.</td></tr>
+  <tr><td>Grupos A y B</td>
+    <td>Con subida y bajada de jugadores y bloqueo de doble convocatoria.</td></tr>
+  <tr><td>Modo sin conexión</td>
+    <td>Service worker con aviso visual.</td></tr>
+  <tr><td>Iconos de la aplicación</td>
+    <td>Seis PNG generados desde el escudo real, incluido el maskable de Android.
+    El manifiesto ya los declara y el APK se puede empaquetar directamente.</td></tr>
+  <tr><td>Marcas físicas rígidas</td>
+    <td>El catálogo de pruebas es editable: borrar, renombrar, reordenar y crear
+    propias. En la ficha solo aparecen las que tienen marca.</td></tr>
+  <tr><td>Documentación de despliegue</td>
+    <td><code>docs/EJECUTAR.md</code>, con tres vías para generar el APK.</td></tr>
+</table>
+
+<h3><span class="tag t-warn">Importante</span> Lo que sigue pendiente</h3>
+
+<table>
+  <tr><th>Qué falta</th><th>Detalle</th></tr>
+  <tr><td>Estadísticas de fase del partido</td>
+    <td>No se registran placajes, melés ni touches ganadas. Para formación
+    probablemente no haga falta anotarlo en directo, pero conviene decidirlo con
+    los entrenadores antes de añadirlo.</td></tr>
+  <tr><td>Alineación por arrastre</td>
+    <td>Hoy se asigna tocando el hueco y eligiendo. Arrastrar sería más directo en
+    pantalla grande, pero funciona peor en móvil y con guantes.</td></tr>
+  <tr><td>Partidos por cuartos</td>
+    <td>El reloj asume dos partes. Algunas categorías juegan cuatro.</td></tr>
+  <tr><td>Gráfica de evolución de marcas</td>
+    <td>Se guarda el historial y se indica la mejora respecto al registro anterior,
+    pero se muestra como lista, no como gráfica.</td></tr>
+</table>
+
+<h3><span class="tag t-info">Mejoras</span> Aumentarían el uso real</h3>
+
+<table>
+  <tr><th>Mejora</th><th>Por qué</th></tr>
+  <tr><td>Notificaciones push reales</td>
+    <td>Ahora solo hay avisos dentro de la app. Sin push, la familia no se entera si
+    no entra. Es lo que más afecta al porcentaje de confirmaciones.</td></tr>
+  <tr><td>Añadir al calendario del móvil</td>
+    <td>Exportar los eventos en formato de calendario evitaría que la familia los
+    apunte a mano.</td></tr>
+  <tr><td>Recordatorio automático</td>
+    <td>El campo de horas ya está en los datos, pero el recordatorio hay que
+    lanzarlo a mano. Automatizarlo requiere servidor.</td></tr>
+  <tr><td>Mapa o enlace del lugar</td>
+    <td>Para los partidos fuera de casa, un enlace de navegación ahorra llamadas.</td></tr>
+  <tr><td>Resultados y clasificación</td>
+    <td>No se registra el marcador de los partidos. Es lo primero que suelen pedir
+    los jugadores.</td></tr>
+  <tr><td>Foto del jugador</td>
+    <td>Ahora se muestran iniciales. Requiere almacenamiento de archivos y
+    consentimiento de imagen.</td></tr>
+  <tr><td>Firma de documentos con PDF</td>
+    <td>La firma se registra con fecha y hora, pero no genera un documento
+    descargable.</td></tr>
+  <tr><td>Dossier LOPIVI real</td>
+    <td>El botón existe y muestra confirmación, pero no genera el PDF.</td></tr>
+  <tr><td>Historial de asistencia por jugador</td>
+    <td>Se muestra el porcentaje, pero no el detalle de qué días faltó.</td></tr>
+</table>
+
+<h3><span class="tag t-mute">Menor</span> Detalles</h3>
+<ul class="fx">
+  <li><span class="dot"></span><div><b>Modo oscuro</b>
+    <span>No implementado. Duplica el trabajo de revisión visual y este público
+    no lo demanda</span></div></li>
+  <li><span class="dot"></span><div><b>Catalán</b>
+    <span>Solo español. En un club de Cornellà el catalán tendría sentido</span></div></li>
+  <li><span class="dot"></span><div><b>Búsqueda global</b>
+    <span>El buscador solo funciona dentro de la plantilla del equipo</span></div></li>
+  <li><span class="dot"></span><div><b>Paginación</b>
+    <span>Con más de 200 jugadores las listas podrían ir lentas</span></div></li>
+</ul>
+
+<div class="box warn">
+  <b>Lo que no es un problema aunque lo parezca</b>
+  <p class="small">Que la app funcione sin servidor no es una carencia del prototipo:
+  es lo que permite enseñarla a un club en dos minutos sin registrarse en nada. Para
+  validar los flujos con personas reales es exactamente lo que hace falta. El
+  servidor solo se vuelve imprescindible cuando varias personas comparten datos.</p>
+</div>
+
+<!-- ═══════════════ PRIORIDAD ═══════════════ -->
+<h2 id="prioridad">14 · Orden recomendado</h2>
+
+<table>
+  <tr><th class="nowrap">Fase</th><th>Qué hacer</th><th>Por qué ahora</th></tr>
+  <tr><td><strong>1</strong></td>
+    <td>Enseñar la app a 5 o 6 personas reales: un tesorero, dos familias y dos
+      entrenadores. Cronometrar las tareas clave.</td>
+    <td>Es gratis y puede cambiar prioridades. Si dos de cada seis fallan la misma
+      tarea, el problema es la pantalla, no el usuario.</td></tr>
+  <tr><td><strong>2</strong></td>
+    <td>Probar el módulo de partido un sábado real, con el entrenador usándolo
+      desde la banda.</td>
+    <td>Es donde más puede fallar la ergonomía: de pie, con prisa y sin tiempo
+      para pensar. Un solo partido revela más que diez revisiones de escritorio.</td></tr>
+  <tr><td><strong>3</strong></td>
+    <td>Empaquetar el APK con PWABuilder y repartirlo al cuerpo técnico.</td>
+    <td>Permite que la prueba real se haga con la app instalada en el móvil, que
+      es como se va a usar de verdad.</td></tr>
+  <tr><td><strong>4</strong></td>
+    <td>Conectar a un servidor con autenticación real y políticas de acceso.</td>
+    <td>Sin esto no hay uso compartido posible. Es el salto de prototipo a producto.</td></tr>
+  <tr><td><strong>5</strong></td>
+    <td>Notificaciones push y recordatorios automáticos.</td>
+    <td>Es lo que más mueve el porcentaje de confirmaciones, que es el indicador
+      central de toda la app.</td></tr>
+  <tr><td><strong>6</strong></td>
+    <td>Estadísticas de fase y evolución de marcas físicas.</td>
+    <td>Solo si los entrenadores las piden tras usar la app una temporada.</td></tr>
+</table>
+
+<div class="box">
+  <b>Una observación final</b>
+  <p class="small">El indicador que importa no es cuántas funciones tiene la app,
+  sino qué porcentaje de familias responde a las convocatorias y si el entrenador
+  sigue usándola en el mes tres. Todo lo demás es secundario. Si en la prueba con
+  personas reales el entrenador vuelve a WhatsApp, ninguna funcionalidad adicional
+  lo va a arreglar.</p>
+</div>
+
+<footer>
+  Rugby Club Cornellà · Documento generado el 29 de septiembre de 2026 ·
+  Estado: prototipo funcional con 498 comprobaciones en verde
+</footer>
+
+</div>
+</body>
+</html>
