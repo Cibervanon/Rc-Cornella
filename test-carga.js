@@ -69,7 +69,13 @@ try {
 
 /* Solo hay que subir la caché si sw.js ha cambiado respecto a lo confirmado.
    Comparar siempre contra HEAD hacía fallar el árbol limpio, donde la versión
-   actual y la confirmada son la misma por definición. */
+   actual y la confirmada son la misma por definición.
+
+   PERO sw.js no es el único que obliga a subir: el SW precachea ARCHIVOS con
+   estrategia "cache primero", así que si cambia uno de esos ficheros sin
+   tocar sw.js, el navegador ve los mismos bytes de SW, no reinstala, y los
+   móviles se quedan sirviendo el js viejo para siempre. La caché tiene que
+   subir cuando cambia CUALQUIERA de los precacheados. */
 let swCambiado = false;
 try {
   swCambiado = require('child_process')
@@ -77,13 +83,29 @@ try {
       { cwd: __dirname, encoding: 'utf8' }).trim() !== '';
 } catch (e) { swCambiado = !Number.isFinite(cacheConfirmada); }
 
+let precacheCambiado = [];
+try {
+  const lista = (sw.match(/const ARCHIVOS = \[([^\]]*)\]/s) || [null, ''])[1];
+  const archivos = lista.split(',').map(s => s.trim().replace(/^['"]|['"]$/g, ''))
+    .filter(Boolean);
+  for (const f of archivos) {
+    const d = require('child_process')
+      .execFileSync('git', ['diff', 'HEAD', '--', f],
+        { cwd: __dirname, encoding: 'utf8' }).trim();
+    if (d) precacheCambiado.push(f);
+  }
+} catch (e) { /* sin git no se puede comparar */ }
+
+const requiereSubida = swCambiado || precacheCambiado.length > 0;
+
 if (!Number.isFinite(cacheActual))
   { console.log('  XX  sw.js no declara la versión de caché'); fail++; }
-else if (swCambiado && cacheActual <= cacheConfirmada)
-  { console.log(`  XX  sw.js cambió sin subir la caché (v${cacheConfirmada} -> v${cacheActual})`); fail++; }
+else if (requiereSubida && cacheActual <= cacheConfirmada)
+  { console.log(`  XX  cambiaron ficheros precacheados sin subir la caché (v${cacheConfirmada} -> v${cacheActual})`); fail++; }
 else
   { console.log(`  ·  caché rccornella-v${cacheActual}` +
-      (swCambiado ? '' : ' (sin cambios respecto a HEAD)')); }
+      (requiereSubida ? '' : ' (sin cambios respecto a HEAD)') +
+      (precacheCambiado.length ? ` · precache actualizado: ${precacheCambiado.join(', ')}` : '')); }
 
 /* Si hay service worker, tiene que tener los dos handlers de push. Un aviso que
    llega pero no se pinta es el fallo más difícil de detectar en un móvil. */

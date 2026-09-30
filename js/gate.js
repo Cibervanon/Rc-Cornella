@@ -336,7 +336,7 @@ const Gate = {
        repinta y sin esto se perderia lo escrito. La contraseña se conserva solo
        en memoria (nunca se vuelve a pintar en el HTML) y no se pisa con el
        campo vacio que deja el repintado. */
-    const passActual = val('rP');
+    const passActual = valp('rP');
     if(passActual) this.vPass = passActual;
     this.vNombre = val('rN'); this.vEmail = val('rE'); this.vTel = val('rT');
     if(!chk('rOk')){ this.err='Debes aceptar la política de privacidad para continuar';
@@ -414,7 +414,7 @@ const Gate = {
 
   async doLogin(){
     if(this.busy) return;
-    const email = val('lE'), password = val('lP');
+    const email = val('lE'), password = valp('lP');
     /* Se conservan email y contrasena entre repintados. La contrasena vive solo
        en memoria y se vuelve a poner en el campo con JS, nunca en el HTML: asi
        al pulsar Intro no desaparece de la pantalla. */
@@ -564,7 +564,7 @@ const Gate = {
        entero, asi que leerlos despues devuelve cadena vacia y el alta fallaba
        siempre con "el email no tiene un formato valido". La contrasena tambien
        se guarda, para poder reintentar sin teclearla otra vez. */
-    const nombre = val('fN'), email = val('fE'), password = val('fP');
+    const nombre = val('fN'), email = val('fE'), password = valp('fP');
     this.vNombre = nombre; this.vEmail = email; this.vPass = password;
     if(!this.vPass || password.length < 8){
       this.err = 'La contraseña debe tener al menos 8 caracteres';

@@ -3,9 +3,15 @@
    ============================================================================ */
 
 const $ = s => document.querySelector(s);
+/* Tambien escapa la comilla simple: casi todos los onclick del proyecto son
+   onclick="Foo('${id}')", asi que un ' sin escapar allow-abriria el atributo. */
 const esc = s => String(s==null?'':s)
-  .replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  .replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const val = id => { const e=document.getElementById(id); return e ? e.value.trim() : ''; };
+/* Para contrasenas. Un espacio pegado al final forma parte de la credencial:
+   recortarlo en silencio cambia la contrasena que la persona cree haber elegido,
+   y si contiene solo espacios se quedaria vacia. */
+const valp = id => { const e=document.getElementById(id); return e ? e.value : ''; };
 const chk = id => { const e=document.getElementById(id); return e ? e.checked : false; };
 const eur = n => Number(n||0).toFixed(2).replace('.',',')+' €';
 const ini = n => String(n||'?').trim().split(/\s+/).slice(0,2)
@@ -59,7 +65,7 @@ function closeSheet(){ $('#sheetWrap').classList.add('hidden'); }
 function confirmSheet(titulo, texto, label, onOk, danger=true){
   window.__ok = onOk;
   sheet(titulo, `
-    <div class="hint ${danger?'bad':''}">${I.warn(16)}<span>${texto}</span></div>
+    <div class="hint ${danger?'bad':''}">${I.warn(16)}<span>${esc(texto)}</span></div>
     <div class="btns" style="margin-top:16px">
       <button class="btn btn-2" onclick="closeSheet()">Cancelar</button>
       <button class="btn ${danger?'btn-danger':''}"

@@ -570,10 +570,15 @@ const Match = {
       </div>`;
     }).join('')}</div>`;
   },
-  borrar(eventId, id){
+borrar(eventId, id){
+    /* La familia no ve este boton: `family.js` lo quita con un regex sobre el
+       HTML. Si ese regex deja de casar (cambia una clase o el orden de los
+       atributos), la acción queda visible para quien no puede hacerla. Aquí se
+       comprueba el rol, que no depende de cómo se haya escrito el HTML. */
+    if(!Data.is('entrenador','coordinador','junta')) return;
     confirmSheet('Eliminar de la cronología',
-      'Se recalcularán el marcador y los minutos jugados.','Eliminar',
-      ()=>{ Data.borrarAccion(eventId,id); Shell.render(); });
+    'Se recalcularán el marcador y los minutos jugados.','Eliminar',
+    ()=>{ Data.borrarAccion(eventId,id); Shell.render(); });
   },
 
   /* ═══════════════ RESUMEN ═══════════════ */

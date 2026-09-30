@@ -17,12 +17,12 @@ global.document = {
   createElement:()=>stub(), addEventListener(){},
   documentElement:{style:{setProperty(){}}}
 };
-global.window = { scrollTo(){}, innerWidth:400 };
+global.window = { scrollTo(){}, innerWidth:400, addEventListener(){}, removeEventListener(){} };
 global.navigator = {};
 
 const fs = require('fs');
 const files = ['icons.js','store.js','ui.js','gate.js','coach.js','family.js',
-  'match.js','board.js','shell.js'];
+  'match.js','board.js','shell.js','backend.js'];
 const src = files.map(f=>fs.readFileSync(__dirname+'/js/'+f,'utf8')).join('\n');
 
 const RUN = String.raw`
@@ -1237,13 +1237,155 @@ ok(stDespuesBaja.reparto<=100, 'el reparto se queda en 100% o menos ('+stDespues
 ok(Data.match(P.id).acciones.length===accionesAntes19,
   'el acta del partido finalizado se conserva intacta');
 
-/* ═══════════════ RESULTADO ═══════════════ */
-console.log('\n' + '─'.repeat(52));
-console.log(fail===0
-  ? '  ✅  '+pass+' comprobaciones correctas'
-  : '  ❌  '+fail+' fallos de '+(pass+fail)+' comprobaciones');
-console.log('─'.repeat(52));
-process.exit(fail?1:0);
+/* ═══════════════ 20. REGRESIÓN: SEGURIDAD Y SINCRONIZACIÓN ═══════════════ */
+S_('20. Regresión: seguridad y sincronización');
+
+// --- XSS: confirmSheet inyectaba el cuerpo sin escapar ---
+// El nombre de una prueba es de club: lo escribe un entrenador y lo lee otro.
+let hojaBody20 = '';
+global.document.querySelector = s => (s==='#sheetBody')
+  ? { set innerHTML(v){ hojaBody20 = v; }, get innerHTML(){ return hojaBody20; },
+      querySelector:()=>null, classList:stub().classList }
+  : stub();
+confirmSheet('Quitar la marca',
+  'Se elimina <img src=x onerror=alert(1)> de este jugador.', 'Quitar', ()=>{});
+ok(hojaBody20.indexOf('<img src=x')<0,
+  'confirmSheet no deja pasar marcado en el cuerpo');
+ok(hojaBody20.indexOf('&lt;img')>=0,
+  'lo muestra como texto, no como HTML');
+global.document.querySelector = () => stub();
+
+// --- esc() también debe cerrar la comilla simple ---
+ok(esc("a'b")==='a&#39;b', 'esc() escapa la comilla simple');
+ok(esc('<b> & "x"')==='&lt;b&gt; &amp; &quot;x&quot;',
+  'esc() sigue escapando <, >, & y la doble comilla');
+
+// --- val() recorta, valp() no: las contraseñas no se recortan ---
+FIELDS.pw20 = '  con espacios  ';
+ok(val('pw20')==='con espacios', 'val() recorta los espacios de un campo normal');
+ok(valp('pw20')==='  con espacios  ', 'valp() NO recorta una contraseña');
+FIELDS.pw20 = '     ';
+ok(valp('pw20')==='     ', 'una contraseña de solo espacios no se vacía con valp()');
+
+// --- El mapeo debe coincidir con las columnas reales de SQL ---
+// audit_log tiene user_id y season_history tiene por_jugador/facturas. Si el
+// nombre no coincide, PostgREST rechaza el lote entero con PGRST204 y la
+// sincronización se queda "pendiente" para siempre.
+ok(Backend.mapa.audit.col && Backend.mapa.audit.col.user==='user_id',
+  'audit: la app escribe "user" y la columna es "user_id"');
+ok(Backend.mapa.historico.col && Backend.mapa.historico.col.porJugador==='por_jugador',
+  'historico: porJugador se renombra a la columna por_jugador de SQL');
+ok(!Object.values(Backend.mapa.historico.col).some(v=>v==='facturas'),
+  'facturas NO se renombra: un nombre igual en ambos lados lo borraría');
+
+const filaAudit20 = Backend.aFila('audit',
+  { id:'a1', user:'u9', accion:'x', at:'2026-01-01' }, 'club1');
+ok(filaAudit20.user_id==='u9' && filaAudit20.user===undefined,
+  'aFila() produce user_id y descarta el campo "user"');
+ok(Backend.desdeFila('audit', { id:'a1', user_id:'u9', accion:'x' }).user==='u9',
+  'desdeFila() deshace el renombrado al bajar del servidor');
+
+const filaHist20 = Backend.aFila('historico',
+  { temporada:'2025', cerrada:'2026', jugadores:10, partidos:8,
+    porJugador:{a:1}, facturas:[{id:'f1'}] }, 'club1');
+ok(filaHist20.por_jugador && filaHist20.porJugador===undefined,
+  'aFila() renombra porJugador a por_jugador');
+ok(Array.isArray(filaHist20.facturas) && filaHist20.facturas.length===1,
+  'y manda las facturas archivadas a su columna');
+// Un archivo antiguo sin el detalle no debe inventar columnas vacías.
+const histVacio20 = Backend.aFila('historico',
+  { temporada:'2024', cerrada:'2025', jugadores:1, partidos:1 }, 'club1');
+ok(!('por_jugador' in histVacio20) && !('facturas' in histVacio20),
+  'un archivo sin detalle no envía columnas inventadas (PGRST204)');
+
+// --- Las tablas "públicas" también se filtran por club ---
+// Si no, el dispositivo se baja los datos de todos los clubes del proyecto.
+const filtros20 = [];
+Backend.clubId = 'clubX';
+Backend.sb = { from(t){ const o = { eq(c,v){ filtros20.push([t,c,v]); return o; },
+  limit(){ return Promise.resolve({ data:[], error:null }); } }; o.select = ()=>o; return o; } };
+Backend.bajar('documents', ()=>{});
+Backend.bajar('categories', ()=>{});
+Backend.bajar('teams', ()=>{});
+Backend.bajar('clubs', ()=>{});
+ok(filtros20.some(f=>f[0]==='documents' && f[1]==='club_id' && f[2]==='clubX'),
+  'documents se filtra por club aunque sea tabla pública');
+ok(filtros20.some(f=>f[0]==='categories' && f[1]==='club_id'),
+  'categories se filtra por club');
+ok(filtros20.every(f=>f[0]!=='clubs'),
+  'clubs NO se filtra: es la única tabla sin columna club_id');
+
+// --- Una lectura fallida no puede dejar datos de la cuenta anterior ---
+let aplicadas20 = null;
+const err20 = async () => {
+  Backend.sb = { from(){ const o = { select(){ return o; }, eq(){ return o; },
+    limit(){ return Promise.resolve({ data:null, error:{ message:'sin red' } }); } };
+    return o; } };
+  const r = await Backend.bajar('players', filas => { aplicadas20 = filas; });
+  ok(r===false, 'bajar() avisa de que la lectura no fue completa');
+  ok(Array.isArray(aplicadas20) && aplicadas20.length===0,
+    'y vacía la colección en vez de dejar los datos de la cuenta anterior');
+};
+err20().catch(e=>{
+  console.log('   ✗ la prueba asíncrona falló: '+e.message);
+  /* Suma al contador de verdad: si no, resumen() lo recalcularía a 0 y el
+     fallo quedaría escondido detrás de un "todo correcto". */
+  fail++;
+});
+
+// --- El indicador "cambios sin subir" sobrevive al reinicio ---
+// Es lo que evita que la siguiente hidratación pise el trabajo hecho sin
+// cobertura: si no, editar sin conexión y cerrar la app tiraba el trabajo.
+Backend.activo = true; Backend.enSilencio = false;
+Backend.sb = { from(){ const o = { select(){ return o; }, eq(){ return o; },
+  limit(){ return Promise.resolve({ data:[], error:null }); } }; return o; } };
+delete DB.d.__sucio;
+Backend.marcar();
+clearTimeout(Backend.temporizador);
+ok(DB.d.__sucio===true, 'marcar() apunta en el disco que hay cambios sin subir');
+ok(JSON.parse(localStorage.getItem(DB_KEY)).__sucio===true,
+  'y de verdad en localStorage, no solo en memoria');
+
+// El vaciado de ciclo de vida está registrado: es lo que dispara el volcar
+// al ocultar la app y al volver la conexión.
+ok(window.__rccVigila===true,
+  'el vaciado al cerrar/ocultar/recuperar conexión está registrado');
+
+// --- volcar() con éxito limpia el indicador ---
+Backend.base = {};
+Backend.sb = { auth: { getSession: () => Promise.resolve(
+    { data:{ session:{ user:{ id:'u20' } } } }) },
+  from(){ const o = { select(){ return o; }, eq(){ return o; },
+    limit(){ return Promise.resolve({ data:[], error:null }); } };
+    o.upsert = () => Promise.resolve({ data:[], error:null });
+    o.delete = () => ({ in: () => Promise.resolve({ data:[], error:null }) });
+    return o; } };
+Backend.volcar().then(()=>{
+  ok(Backend.pendientes===false, 'volcar() limpia pendientes cuando todo sube');
+  ok(DB.d.__sucio===false, 'y baja el indicador local de cambios sin subir');
+  ok(JSON.parse(localStorage.getItem(DB_KEY)).__sucio===false,
+    'y lo baja también en disco');
+}).catch(e=>{
+  console.log('   ✗ la prueba de volcar falló: '+e.message);
+  fail++;
+});
+
+/* El resumen se imprime desde 'exit' y no aqui: hay comprobaciones de
+   sincronizacion que son promesas, y saldría antes de que terminen. */
+function resumen(){
+  global.__fallos = fail;
+  console.log('\n' + '─'.repeat(52));
+  console.log(fail===0
+    ? '  ✅  '+pass+' comprobaciones correctas'
+    : '  ❌  '+fail+' fallos de '+(pass+fail)+' comprobaciones');
+  console.log('─'.repeat(52));
+}
+global.__resumen = resumen;
 `;
 
 eval(src + '\n' + RUN);
+
+process.on('exit', () => {
+  if(global.__resumen) global.__resumen();
+  process.exitCode = global.__fallos ? 1 : 0;
+});

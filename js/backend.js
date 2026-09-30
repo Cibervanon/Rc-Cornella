@@ -104,13 +104,30 @@ const Backend = {
     signatures:   { tabla:'signatures' },
     historico:    { tabla:'season_history',
                     clave: r => r.temporada + ':' + r.cerrada,
-                    num:['jugadores','partidos'] },
-    audit:        { tabla:'audit_log' }
+                    num:['jugadores','partidos'],
+                    /* Sin esto el lote entero lo rechaza PostgREST con PGRST204
+                       ("columna no encontrada") y `pendientes` se queda a true
+                       para siempre: el cierre de temporada nunca llega al
+                       servidor. La columna las crea la migracion 006.
+                       Solo se renombra `porJugador`: poner aqui un nombre
+                       igual en los dos lados (facturas:facturas) haria que
+                       aFila() lo borrase al "renombrarlo". */
+                    col:{ porJugador:'por_jugador' } },
+    audit:        { tabla:'audit_log',
+                    /* La columna se llama user_id. Mandando `user` fallaba el
+                       lote entero de bitacora con PGRST204. */
+                    col:{ user:'user_id' } }
   },
 
   /* Tablas legibles sin iniciar sesión: son lo que se muestra en la pantalla
-     de acceso antes de que nadie haya entrado (nombre, categorías, cuotas). */
+     de acceso antes de que nadie haya entrado (nombre, categorías, cuotas).
+     OJO: esto NO significa "sin filtro de club". `seasons`, `categories`,
+     `teams` y `documents` todas tienen club_id, y leerlas sin filtrar traía
+     los datos de todos los clubes del proyecto y hacía que d.season se quedara
+     con la temporada activa de otro club. Lo único que no se puede filtrar por
+     club es `clubs`, porque no tiene esa columna: ver `sinClub`. */
   publicas: ['clubs','seasons','categories','teams','documents'],
+  sinClub: ['clubs'],
 
   base: {},          // última copia que el servidor ha confirmado
   pendientes: false,
@@ -182,19 +199,51 @@ const Backend = {
   async hidratar(){
     if(!this.activo || !DB) return;
     this.enSilencio = true;
+    /* Si alguna lectura falla, no se fija la linea base: marcarla con una
+       hidratacion a medias haria que el proximo volcar creyera que el servidor
+       esta vacio y borrara filas que si existen. */
+    let completo = true;
     try{
       const d = DB.d || (DB.d = Object.assign(EMPTY(), DB.d || {}));
 
+      /* Hay cambios locales sin subir (se edito sin cobertura y se cerro la
+         app). Primero se intenta subir: si funciona, el servidor ya tiene todo
+         y despues si se puede sustituir la memoria por lo suyo. */
+      if(d.__sucio && this.uid){
+        this.enSilencio = false;
+        await this.volcar();
+        this.enSilencio = true;
+      }
+      const sucio = !!d.__sucio;
+
+      /* Si sigue sin poder subir, NO se pisa lo que hay en el dispositivo: se
+         fusiona lo del servidor con lo local. Pierde como mucho un borrado hecho
+         sin cobertura (el servidor lo devuelve), pero nunca una edicion. */
+      const fundir = sucio;
+      const claveDe = (coll, obj) => {
+        const f = this.aFila(coll, obj, d.club ? d.club.id : null);
+        if(!f) return String(obj && obj.id);
+        const cfg = this.mapa[coll] || {};
+        return String(f[cfg.pk || 'id']);
+      };
+      const meter = (coll, filas) => {
+        if(!fundir){ d[coll] = filas; return; }
+        const previos = Array.isArray(d[coll]) ? d[coll] : [];
+        const vistos = new Set();
+        filas.forEach(o => { try{ vistos.add(claveDe(coll, o)); }catch(e){} });
+        d[coll] = filas.concat(previos.filter(o => !vistos.has(claveDe(coll, o))));
+      };
+
       // El club primero: sin él no se sabe a qué club preguntar.
-      await this.bajar('clubs', filas => {
+      completo = await this.bajar('clubs', filas => {
         d.club = filas[0] ? this.desdeFila('club', filas[0]) : null;
-      });
+      }) && completo;
       this.clubId = d.club ? d.club.id : null;
 
-      await this.bajar('seasons',    filas => { d.season = filas.find(f => f.activa) || null; });
-      await this.bajar('categories', filas => { d.categories = filas; });
-      await this.bajar('teams',      filas => { d.teams = filas; });
-      await this.bajar('documents',  filas => { d.docs = filas; });
+      completo = await this.bajar('seasons',    filas => { d.season = filas.find(f => f.activa) || null; }) && completo;
+      completo = await this.bajar('categories', filas => meter('categories', filas)) && completo;
+      completo = await this.bajar('teams',      filas => meter('teams', filas)) && completo;
+      completo = await this.bajar('documents',  filas => meter('docs', filas)) && completo;
 
       if(this.uid && this.clubId){
         // Todo lo demás, ya con sesión. Las políticas RLS deciden qué llega,
@@ -206,27 +255,44 @@ const Backend = {
                        'reads','tasks','notifs','invoices','mandates','signatures',
                        'historico','audit','invites'];
         for(const coll of orden){
-          await this.bajar(this.mapa[coll].tabla, filas => { d[coll] = filas; });
+          const ok = await this.bajar(this.mapa[coll].tabla, filas => meter(coll, filas));
+          if(!ok) completo = false;
         }
       }
 
       this.clubId = d.club ? d.club.id : null;
-      this.base = this.instantanea();
+      if(completo && !fundir){
+        this.base = this.instantanea();
+      }else{
+        /* La base anterior se deja como estaba: es la ultima foto que se sabe
+           correcta, y con `fundir` ademas contiene filas que aun NO estan en el
+           servidor. Fijarla aqui haria que el proximo volcar las diera por
+           buenas y no las subiera nunca. */
+        this.hidratacionIncompleta = true;
+      }
       DB.guardar();
     }finally{
       this.enSilencio = false;
     }
   },
 
+  /* Devuelve true si la lectura fue completa. `aplicar([])` en caso de error no
+     es cosmetico: si no, la coleccion se queda con los datos de la cuenta
+     anterior y ademas se marcan como confirmados por el servidor. */
   async bajar(tabla, aplicar){
     let q = this.sb.from(tabla).select('*');
-    if(!this.publicas.includes(tabla) && this.clubId) q = q.eq('club_id', this.clubId);
+    /* El filtro va siempre que conozcamos el club, tambien para las tablas
+       "publicas": ser legible sin sesion no puede significar traerse los datos
+       de los demas clubes. */
+    if(this.clubId && !this.sinClub.includes(tabla)) q = q.eq('club_id', this.clubId);
     const { data, error } = await q.limit(5000);
     if(error){
       console.warn('[backend] no se pudo leer ' + tabla + ': ' + error.message);
-      return;
+      aplicar([]);
+      return false;
     }
     aplicar(this.desdeFilas(tabla, data || []));
+    return true;
   },
 
   /* Fila de PostgreSQL -> objeto de la app. */
@@ -254,6 +320,10 @@ const Backend = {
   marcar(){
     if(!this.activo || !this.sb || this.enSilencio) return;
     this.pendientes = true;
+    /* Se apunta en los datos locales, no solo en memoria: si la persona
+       edita sin cobertura y cierra la app, al volver a abrirla hay que saber
+       que lo que hay en el dispositivo todavia no esta en el servidor. */
+    if(DB && DB.d && !DB.d.__sucio){ DB.d.__sucio = true; DB.guardar(); }
     clearTimeout(this.temporizador);
     this.temporizador = setTimeout(() => this.volcar(), this.cfg.syncDebounceMs || 1500);
   },
@@ -306,9 +376,13 @@ const Backend = {
       }
     }
 
-    this.pendientes = problemas.length > 0;
+this.pendientes = problemas.length > 0;
+    /* El indicador local se baja solo cuando TODAS las colecciones han subido.
+       Si queda alguna pendiente, se mantiene para que la proxima hidratacion
+       sepa que no puede pisar la memoria con lo del servidor. */
+    if(!this.pendientes && DB && DB.d && DB.d.__sucio){ DB.d.__sucio = false; DB.guardar(); }
     this.estado = problemas.length ? 'error' : 'listo';
-    this.ultimoError = problemas.length ? problemas.join(' · ') : null;
+    this.ultimoError = problemas ? problemas.join(' · ') : null;
     this.aviso();
   },
 
@@ -415,6 +489,19 @@ const Backend = {
      y en modo local (sin nube a la que volver) era perdida de datos.
      Para borrar el club de verdad esta DB.wipe(). */
   async salir(){
+    /* Se sube lo pendiente ANTES de tirar el estado. Si no, el debounce de 1,5 s
+       se descarta con clearTimeout y el trabajo de los ultimos segundos se
+       pierde sin avisar, justo lo que la UI promete al decir "Lo que tengas
+       pendiente de subir, se subira antes de salir". */
+    if(this.activo && this.sb && this.pendientes){
+      clearTimeout(this.temporizador);
+      try{
+        await Promise.race([
+          this.volcar(),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))
+        ]);
+      }catch(e){ /* sin red no hay nada que hacer: se queda en el dispositivo */ }
+    }
     this.uid = null;
     this.clubId = null;
     this.base = {};
@@ -538,3 +625,28 @@ Backend.correoEnLote = async function(plantilla, datos, destinatarios){
 
 /* `backendListo()` vive en js/store.js, que se carga siempre. Aquí solo se
    deja constancia de que este fichero no lo necesita. */
+
+/* ---------------------------------------------------------------------------
+   VACIADO AL CERRAR Y AL RECUPERAR LA CONEXION
+   El debounce de 1,5 s es una ventana real de perdida de datos: si se edita y
+   la app se cierra antes de que salte, ese cambio no llego al servidor y la
+   siguiente hidratacion lo pisaba. Se intenta subir al ocultar la app, al
+   cerrarla y al volver la conexion. `visibilitychange` es el evento fiable:
+   `pagehide` no garantiza tiempo para una peticion asincrona.
+   --------------------------------------------------------------------------- */
+(function vigilarCiclo(){
+  if(typeof window === 'undefined' || window.__rccVigila) return;
+  /* En Node (las pruebas) no hay DOM: se sale en lugar de reventar al cargar. */
+  if(typeof window.addEventListener !== 'function') return;
+  if(typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
+  window.__rccVigila = true;
+  const subir = () => {
+    try{ if(Backend.activo && window.DB && window.DB.d && window.DB.d.__sucio) Backend.volcar(); }
+    catch(e){ /* al cerrar la app no hay donde avisar */ }
+  };
+  window.addEventListener('online', subir);
+  window.addEventListener('pagehide', subir);
+  document.addEventListener('visibilitychange', () => {
+    if(document.visibilityState === 'hidden') subir();
+  });
+})();
