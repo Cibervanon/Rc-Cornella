@@ -16,7 +16,7 @@
 /* v6: se ha añadido js/fcm.js (avisos push) y se ha fijado la versión de
    supabase-js. Al subir este número, el activate borra la caché vieja: por eso
    hay que subirlo en cada cambio, aunque el nombre del fichero no cambie. */
-const CACHE = 'rccornella-v13';
+const CACHE = 'rccornella-v14';
 const ARCHIVOS = [
   './', './index.html', './styles.css', './manifest.json',
   './js/config.js', './js/icons.js', './js/store.js', './js/ui.js', './js/gate.js',

@@ -1366,6 +1366,43 @@ ok(pend20b
 ok(hoja20b.indexOf('onclick="closeSheet()"')>=0,
   'siempre hay una forma de cerrar la hoja');
 
+/* ═══════════════ 21. PUERTA: EL FUNDADOR NO QUEDA ATRAPADO ═══════════════ */
+S_('21. Puerta: el fundador no queda atrapado');
+// Con sesion pero sin rol y SIN club, la puerta no puede pedir un codigo:
+// los crea la junta, y sin junta no hay codigos. Era el caso del fundador
+// que acaba de crear su cuenta (o la confirmo con el enlace del correo):
+// la app le forzaba la pantalla de codigo y el boton de Volver no salia.
+const uid21 = 'u-fundador-21';
+Backend.activo = true; Backend.uid = uid21;
+Data.endSession(); Data.setSession({ userId: uid21, rol: null });
+const clubGuardado21 = DB.load().club;
+
+// sin club: la puerta muestra el alta del fundador, no la pantalla de codigo
+DB.load().club = null;
+Gate.step = null; Gate.err = null;
+Gate.render();
+ok(Gate.step!=='codigo',
+  'sin club y con sesion sin rol, NO fuerza la pantalla de codigo');
+ok(Gate.step==='bienvenida', 'y muestra el alta del fundador');
+
+// con club: si toca la pantalla de codigo, pero una sola vez
+DB.load().club = clubGuardado21;
+Gate.step = null;
+Gate.render();
+ok(Gate.step==='codigo', 'con club delante y sin rol, si fuerza la pantalla de codigo');
+Gate.reset('elegir');
+ok(Gate.step==='elegir', 'y tras darle a Volver, el boton si funciona');
+Gate.reset('login');
+ok(Gate.step==='login', 'y se puede navegar a entrar con cuenta');
+
+// sin sesion, todo queda como siempre
+Backend.uid = null;
+Data.endSession();
+Gate.step = null; Gate.render();
+ok(Gate.step==='bienvenida' || Gate.step==='elegir',
+  'sin sesion la puerta arranca por donde toca');
+DB.load().club = clubGuardado21; DB.guardar();
+
 /* El resumen se imprime desde 'exit' y no aqui: hay comprobaciones de
    sincronizacion que son promesas, y saldría antes de que terminen. */
 function resumen(){

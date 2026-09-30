@@ -102,7 +102,18 @@ const Gate = {
   revisarSesion(){
     if(!backendListo() || !Backend.uid) return;
     if(Data.myRoles().length) return;
-    if(this.step !== 'codigo' && this.step !== 'datos') this.step = 'codigo';
+    /* Solo se fuerza al LLEGAR a la puerta (step null). Re-forzarlo en cada
+       repintado rompia el boton de Volver: dabas a Volver, la pantalla
+       volvia a aparecer y parecia que el boton no funcionaba. */
+    if(this.step !== null) return;
+    /* Sin club delante no hay codigos que escribir: los crea la junta, y sin
+       junta no hay codigos. Quien tiene cuenta pero ningun rol y ningun club
+       es el FUNDADOR: la pantalla de bienvenida le deja fundar. Antes se le
+       forzaba aqui la pantalla de codigo y quedaba atrapado pidiendo un
+       codigo que nadie podia darle. Cuando el club SI existe (alguien lo
+       creo) y a esta cuenta le falta el rol, si toca la pantalla de codigo. */
+    if(!Data.clubExists()) return;
+    this.step = 'codigo';
     this.cargarCuentaGoogle();
   },
 
