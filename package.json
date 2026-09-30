@@ -1,0 +1,27 @@
+{
+  "name": "rc-cornella-main",
+  "version": "1.0.0",
+  "description": "Aplicación de gestión del club. Arranca **completamente vacía**: no hay usuarios, jugadores ni eventos de demostración. Todo se crea cuando alguien funda el club y el resto se registra.",
+  "main": "sw.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "node test.js && node test-flujo.js",
+    "test:unit": "node test.js",
+    "test:flujo": "node test-flujo.js",
+    "iconos": "node build-android-icons.js",
+    "web": "node copiar-web.js",
+    "apk": "npm run iconos && npm run web && cap sync android && cd android && gradlew.bat assembleDebug"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/cli": "^8.5.2",
+    "@capacitor/core": "^8.5.2"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.12.0"
+  }
+}

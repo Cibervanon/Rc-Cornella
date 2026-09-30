@@ -96,8 +96,14 @@ Verificado con pruebas: un entrenador no ve las notas de otro, y la familia no v
 ## Pruebas
 
 ```bash
-node test.js
+node test.js        # 498 comprobaciones de los flujos de la app
+node test-nube.js   # 66 comprobaciones de la sincronización con el servidor
+node test-carga.js  # el orden de los scripts y la caché del service worker
 ```
+
+Las dos primeras no necesitan red, ni cuentas, ni Docker: `test-nube.js` trabaja
+contra un Supabase falso y comprueba que solo se sube lo que ha cambiado, que un
+fallo del servidor no pierde nada y que sin sesión no se sube nada.
 
 **498 comprobaciones** en 18 bloques, simulando cada perfil de principio a fin, incluido un partido completo:
 
@@ -133,8 +139,11 @@ sw.js               modo sin conexión
 build-icons.py      genera los iconos desde el escudo
 icon-*.png          iconos de la aplicación
 manifest.json       PWA
-test.js             174 comprobaciones de flujo
+test.js             498 comprobaciones de flujo
+test-nube.js        66 comprobaciones de la capa de servidor
+test-carga.js       comprueba el orden de carga de los scripts
 js/
+  config.js         lo único que hay que rellenar para encender el servidor
   icons.js          45 iconos SVG + escudo del club
   store.js          datos, roles, códigos y reglas de negocio
   ui.js             helpers de presentación
@@ -143,10 +152,24 @@ js/
   family.js         familia y jugador
   board.js          junta directiva
   match.js          día de partido
+  backend.js        Supabase: hidratación, sincronización y correo
+  fcm.js            avisos push en el móvil (opcional, vía Firebase)
   shell.js          sesión, navegación y render
+supabase/
+  migrations/       esquema, políticas RLS y tabla de push
+  functions/        Edge Functions: send-mail (Resend) y send-push (Firebase)
 docs/
   EJECUTAR.md       cómo ejecutarla y convertirla en APK
+  CONFIGURACION.md  cómo encender el servidor, paso a paso
 FUNCIONALIDADES.html  catálogo completo de funciones
 ```
 
-Los datos viven en `localStorage`. Para empezar de cero: **Más → Borrar todos los datos**.
+## Los datos
+
+Por defecto viven en `localStorage`, en el navegador. Para empezar de cero:
+**Más → Borrar todos los datos**.
+
+Con el servidor encendido dejan de estar solo en el dispositivo: cada persona
+tiene su cuenta y las políticas RLS deciden qué ve cada una. El paso a paso está
+en [docs/CONFIGURACION.md](docs/CONFIGURACION.md); mientras `js/config.js` esté
+vacío, la aplicación se comporta exactamente como hasta ahora.

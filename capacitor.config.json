@@ -1,0 +1,10 @@
+{
+  "appId": "com.rccornella.app",
+  "appName": "RC Cornellà",
+  "webDir": "www",
+  "backgroundColor": "#121212",
+  "android": {
+    "backgroundColor": "#121212",
+    "allowMixedContent": false
+  }
+}

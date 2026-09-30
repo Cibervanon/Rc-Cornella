@@ -1,0 +1,77 @@
+# ---------------------------------------------------------------------------
+# Node
+# ---------------------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# ---------------------------------------------------------------------------
+# www/ es GENERADO: lo crea copiar-web.js copiando la raiz.
+# No se sube a proposito. Si se subiera, existirian dos copias de los .js y
+# pasaria justo lo que ya ha pasado: arreglar un fichero en la raiz, olvidar
+# copiarlo y que el movil siga con la version antigua.
+#   npm run web   ->  regenera www/
+# ---------------------------------------------------------------------------
+www/
+
+# ---------------------------------------------------------------------------
+# Android: nativo SI se sube (strings.xml, iconos, manifest...), pero todo lo
+# que genera la build o depende de cada maquina, no.
+#   npm run apk   ->  iconos + web + cap sync + gradlew
+# ---------------------------------------------------------------------------
+android/.gradle/
+android/build/
+android/app/build/
+android/app/release/
+android/local.properties
+android/capacitor-cordova-android-plugins/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json
+# capacitor.build.gradle / capacitor.settings.gradle SI se versionan: los genera
+# cap sync y Gradle los usa al configurar, y asi se ve si cambia la config.
+
+# ---------------------------------------------------------------------------
+# Paquetes de distribucion: se generan, no se versionan.
+# Copia el .apk a mano cuando quieras entregarlo.
+# ---------------------------------------------------------------------------
+*.apk
+*.aab
+*.idsig
+
+# ---------------------------------------------------------------------------
+# Claves, certificados y secretos: NUNCA subirlos.
+# El client_secret de Google que se descargo en Descargas va aqui fuera del
+# repo; ademas esta comprometido y hay que regenerarlo en Google Cloud.
+# ---------------------------------------------------------------------------
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+google-services.json
+GoogleService-Info.plist
+client_secret*.json
+service_role*.json
+
+# ---------------------------------------------------------------------------
+# Supabase local (contiene tokens de la CLI)
+# ---------------------------------------------------------------------------
+supabase/.temp/
+supabase/.branches/
+supabase/.env
+supabase/config.toml.local
+
+# ---------------------------------------------------------------------------
+# Sistema, editores y logs
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.log

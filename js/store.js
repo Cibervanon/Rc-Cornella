@@ -46,16 +46,35 @@ const EMPTY = () => ({
   audit: []
 });
 
+/* ---------- acceso opcional al servidor ----------
+   Si js/backend.js no está cargado, o no hay configuración, o el arranque
+   falló, NUBE() devuelve null y todo el fichero se comporta exactamente igual
+   que antes: localStorage y nada más. Esa es la garantía de que publicar esta
+   versión no rompe la app que ya funciona. */
+const NUBE = () => (typeof Backend !== 'undefined' && Backend.activo) ? Backend : null;
+
+/* ¿Hay un servidor utilizable? Si js/backend.js no está cargado —porque esta
+   versión se usa sin configurar nada, o porque falla el arranque— la respuesta
+   es no y todo sigue con localStorage. Vive aquí y no en backend.js para que
+   exista siempre: el resto de ficheros lo usan sin comprobar nada. */
+const backendListo = () => !!(typeof Backend !== 'undefined' && Backend.activo);
+
 const DB = {
   d: null,
   load(){
     if(this.d) return this.d;
     const raw = localStorage.getItem(DB_KEY);
     if(raw){ try{ this.d = JSON.parse(raw); return this.d; }catch(e){} }
-    this.d = EMPTY(); this.save(); return this.d;
+    this.d = EMPTY(); this.guardar(); return this.d;
   },
-  save(){ localStorage.setItem(DB_KEY, JSON.stringify(this.d)); },
-  wipe(){ localStorage.removeItem(DB_KEY); localStorage.removeItem(SES_KEY);
+  /** Solo al disco. Para cuando el contenido ya viene del servidor y no hay
+      nada que sincronizar. */
+  guardar(){ localStorage.setItem(DB_KEY, JSON.stringify(this.d)); },
+  /** Guarda en disco y avisa al servidor de que algo ha cambiado. */
+  save(){ this.guardar(); const b = NUBE(); if(b) b.marcar(); },
+  /** Vacía la copia local sin recargar (al cerrar sesión en modo servidor). */
+  vaciar(){ localStorage.removeItem(DB_KEY); this.d = null; },
+  wipe(){ this.vaciar(); localStorage.removeItem(SES_KEY);
     this.d = null; location.reload(); }
 };
 
@@ -279,20 +298,28 @@ const Data = {
      ALTA Y ACCESO
      ============================================================ */
 
+  /** Identificadores que el alta necesita devolver al servidor cuando hay
+      nube: los mismos que se generarán aquí, para que ambas copias coincidan. */
+  idsParaFundar(){ return { club_id:uid('club'), season_id:uid('sea') }; },
+
   /** Funda el club. Solo puede hacerlo la primera persona. */
-  foundClub({ clubNombre, ciudad, temporada, userNombre, email, password, categorias }){
+  foundClub({ clubNombre, ciudad, temporada, userNombre, email, password, categorias,
+              userId, ids, familyCode }){
     const d = DB.load();
     if(d.club) throw new Error('Este club ya está creado. Pide tu código de acceso a la junta.');
     if(!clubNombre?.trim()) throw new Error('Indica el nombre del club');
     if(!this.validEmail(email)) throw new Error('El email no tiene un formato válido');
-    if(password.length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres');
+    if(!userId && password.length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres');
 
-    d.club = { id:uid('club'), nombre:clubNombre.trim(), deporte:'Rugby',
+    d.club = { id:ids?.club_id || uid('club'), nombre:clubNombre.trim(), deporte:'Rugby',
       ciudad:(ciudad||'').trim(), fundado:1931, creado:today() };
-    d.season = { id:uid('sea'), nombre:temporada||'2026-27', activa:true };
+    d.season = { id:ids?.season_id || uid('sea'), nombre:temporada||'2026-27', activa:true };
 
-    const u = { id:uid('u'), nombre:userNombre.trim(), email:email.trim().toLowerCase(),
-      hash:hash(password), creado:today() };
+    const u = { id:userId || uid('u'), nombre:userNombre.trim(),
+      email:email.trim().toLowerCase(), creado:today() };
+    // Sin nube la contraseña se guarda aquí. Con nube la custodian Supabase
+    // Auth y aquí no se copia nada.
+    if(!userId) u.hash = hash(password);
     d.users.push(u);
     d.members.push({ club_id:d.club.id, user_id:u.id, rol:'junta' });
 
@@ -307,7 +334,7 @@ const Data = {
     DOC_PRESET.forEach(x=>d.docs.push({ id:uid('doc'), ...x, obligatorio:true }));
 
     // Código público de familias, permanente.
-    d.invites.push({ code:makeCode(), rol:'familia', usos:0, max:null,
+    d.invites.push({ code:familyCode || makeCode(), rol:'familia', usos:0, max:null,
       caduca:null, creado_por:u.id, nota:'Código general para familias' });
 
     DB.save();
@@ -332,29 +359,40 @@ const Data = {
     return { ok:true, rol:inv.rol, invite:inv };
   },
 
-  /** Registro. El rol SIEMPRE viene del código, nunca lo elige el usuario. */
-  register({ nombre, email, password, code, tel }){
+  /* Registro. El rol SIEMPRE viene del código, nunca lo elige el usuario.
+     - `userId` lo inyecta Supabase Auth cuando hay nube; sin él la cuenta es
+       solo local y aquí se guarda la contraseña.
+     - `resuelto` es el resultado de la comprobación del código en el servidor.
+       Cuando está, el consumo del código ya lo ha contabilizado la base de
+       datos y no hay que tocar nada local: la tabla de códigos está cerrada a
+       todo el mundo menos la junta. */
+  register({ nombre, email, password, code, tel, userId, resuelto }){
     const d = DB.load();
     if(!d.club) throw new Error('Todavía no hay ningún club creado');
     if(!nombre?.trim()) throw new Error('Escribe tu nombre y apellidos');
     if(!this.validEmail(email)) throw new Error('El email no tiene un formato válido');
-    if((password||'').length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres');
+    if(!userId){
+      if(!password) throw new Error('Falta la contraseña');
+      if(password.length < 8) throw new Error('La contraseña debe tener al menos 8 caracteres');
+    }
     if(d.users.some(u=>u.email===email.trim().toLowerCase()))
       throw new Error('Ya existe una cuenta con ese email. Prueba a iniciar sesión.');
 
-    const chk = this.peekCode(code);
+    const chk = resuelto || this.peekCode(code);
     if(!chk.ok) throw new Error(chk.error);
+    const inv = chk.invite || {};
 
-    const u = { id:uid('u'), nombre:nombre.trim(), email:email.trim().toLowerCase(),
-      hash:hash(password), tel:(tel||'').trim(), creado:today() };
+    const u = { id:userId || uid('u'), nombre:nombre.trim(), email:email.trim().toLowerCase(),
+      tel:(tel||'').trim(), creado:today() };
+    if(!userId) u.hash = hash(password);
     d.users.push(u);
     d.members.push({ club_id:d.club.id, user_id:u.id, rol:chk.rol });
 
-    chk.invite.usos++;
+    if(inv.usos !== undefined) inv.usos++;
 
     // Si el código era nominal de entrenador, se le asigna su equipo.
-    if(chk.rol==='entrenador' && chk.invite.team_id){
-      d.staff.push({ id:uid('st'), team_id:chk.invite.team_id, user_id:u.id,
+    if(chk.rol==='entrenador' && inv.team_id){
+      d.staff.push({ id:uid('st'), team_id:inv.team_id, user_id:u.id,
         cargo:'Entrenador' });
       d.certs.push({ id:uid('ce'), user_id:u.id, nombre:u.nombre,
         tipo:'CDNS', estado:'ausente', formacion:false });
@@ -368,6 +406,17 @@ const Data = {
     DB.save();
     this.setSession({ userId:u.id, rol:chk.rol });
     this.log('usuario.alta', { rol:chk.rol });
+
+    // Confirmación de que la cuenta ya existe. Sin nube no se manda nada, así
+    // que el comportamiento local no cambia.
+    const R = ROLES[chk.rol];
+    this.correo('bienvenida', {
+      destinatarioEmail:u.email, destinatario:u.nombre,
+      club:this.clubNombre(), rol:R ? R.t.toLowerCase() : chk.rol,
+      proximo:'Ve a tu perfil y revisa los datos de contacto.',
+      appUrl:this.appUrl()
+    });
+
     return u;
   },
 
@@ -383,14 +432,48 @@ const Data = {
   },
 
   changePassword(actual, nueva){
+    if(nueva.length < 8) throw new Error('La nueva contraseña debe tener al menos 8 caracteres');
+    // Con nube no se puede comprobar la actual aquí: la contraseña no está en
+    // este dispositivo. La revalida Supabase, que además cierra la sesión.
+    const b = NUBE();
+    if(b) return b.cambiarPassword(nueva);
     const u = this.me();
     if(u.hash !== hash(actual)) throw new Error('La contraseña actual no es correcta');
-    if(nueva.length < 8) throw new Error('La nueva contraseña debe tener al menos 8 caracteres');
     u.hash = hash(nueva); DB.save();
   },
 
+  /* ---------- correo ----------
+     Todo pasa por la Edge Function: la clave de Resend está en el servidor y
+     nunca llega al navegador. Sin nube, o sin dirección, no se hace nada y la
+     app sigue igual. */
+  correo(plantilla, datos, extra){
+    const b = NUBE(); if(!b) return;
+    b.correo(plantilla, datos, extra).catch(()=>{});
+  },
+  correoEnLote(plantilla, datos, destinatarios){
+    const b = NUBE(); if(!b || !destinatarios.length) return;
+    b.correoEnLote(plantilla, datos, destinatarios).catch(()=>{});
+  },
+  /** Direcciones de correo de los tutores de un deportista, sin repetir. */
+  correosDe(pid){
+    const vistos = new Set(), out = [];
+    this.guardiansOf(pid).forEach(g=>{
+      const m = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test((g.email||'').trim());
+      if(m && !vistos.has(g.email)){ vistos.add(g.email);
+        out.push({ email:g.email, destinatarioEmail:g.email, nombre:g.nombre }); }
+    });
+    return out;
+  },
+  clubNombre(){ return (this.club()||{}).nombre || 'Rugby Club Cornellà'; },
+  appUrl(){ return (typeof location !== 'undefined' && location.origin) || ''; },
+  fechaLarga(iso){
+    try{ return new Date(iso).toLocaleString('es-ES',
+      { weekday:'long', day:'numeric', month:'long', hour:'2-digit', minute:'2-digit' }); }
+    catch(e){ return iso; }
+  },
+
   /* ---------- invitaciones (solo junta) ---------- */
-  createInvite({ rol, nota, team_id, max=1, dias=30 }){
+  createInvite({ rol, nota, team_id, max=1, dias=30, email, nombre }){
     if(!this.is('junta')) throw new Error('Solo la junta puede generar códigos de acceso');
     if(rol==='jugador') throw new Error('Los jugadores se dan de alta desde la ficha de su familia');
     const d = DB.load();
@@ -399,8 +482,17 @@ const Data = {
       caduca: rol==='familia' && max===null ? null : cad.toISOString().slice(0,10),
       creado_por:this.ses.userId, nota:nota||'', team_id:team_id||null,
       creado:today() };
+    // El correo es opcional: el código sigue funcionando si no se indica.
+    if(this.validEmail(email)) inv.email = email.trim().toLowerCase();
     d.invites.push(inv); DB.save();
     this.log('invite.creado', { rol });
+    if(inv.email){
+      this.correo('codigo', {
+        destinatarioEmail: inv.email, destinatario: nombre || inv.email,
+        codigo: inv.code, club:this.clubNombre(), nota:inv.nota,
+        caduca:inv.caduca, appUrl:this.appUrl()
+      });
+    }
     return inv;
   },
   invites(){ return DB.load().invites; },
@@ -1087,8 +1179,9 @@ const Data = {
   /** Avisa a las familias de que un evento ha cambiado de fecha u hora. */
   avisarCambioEvento(id){
     const e = this.event(id);
+    const esPartido = e.tipo==='partido';
     this.teamPlayers(e.team_id).forEach(p=>{
-      const txt = (e.tipo==='partido'?'El partido':'El entrenamiento')+
+      const txt = (esPartido?'El partido':'El entrenamiento')+
         ' pasa al '+new Date(e.inicio).toLocaleString('es-ES',
           { weekday:'long', day:'numeric', month:'long',
             hour:'2-digit', minute:'2-digit' });
@@ -1096,6 +1189,14 @@ const Data = {
         if(g.user_id) this.notify(g.user_id,'Cambio de horario', txt);
       });
       if(p.user_id) this.notify(p.user_id,'Cambio de horario', txt);
+
+      this.correosDe(p.id).forEach(c=>this.correo('cambioHorario', {
+        destinatarioEmail:c.email, destinatario:c.nombre || c.email,
+        club:this.clubNombre(), tipoEvento:esPartido?'partido':'entrenamiento',
+        nombreEvento:e.titulo || (esPartido?'Partido':'Entrenamiento'),
+        cuando:this.fechaLarga(e.inicio),
+        lugar:e.lugar || e.local || '', enlace:this.appUrl()
+      }));
     });
     DB.save();
   },
@@ -1132,17 +1233,46 @@ const Data = {
     const d = DB.load();
     const pend = d.rsvp.filter(r=>r.event_id===eid && r.estado==='sin_responder');
     const ev = this.event(eid);
+    const esPartido = ev && ev.tipo==='partido';
+
+    // Para el correo se agrupa por tutor: si tiene dos hijos sin responder en
+    // el mismo evento, recibe un correo, no dos.
+    const porTutor = new Map();
+    pend.forEach(r=>{
+      const p = this.player(r.player_id);
+      const nombre = p ? p.nombre.split(' ')[0] : '';
+      this.correosDe(r.player_id).forEach(c=>{
+        const prev = porTutor.get(c.email);
+        if(prev) prev.nombres.push(nombre);
+        else porTutor.set(c.email, { ...c, nombres:[nombre] });
+      });
+    });
+
     pend.forEach(r=>{
       r.recordatorios = (r.recordatorios||0)+1;
       const p = this.player(r.player_id);
       this.guardiansOf(r.player_id).forEach(g=>{
         if(g.user_id) this.notify(g.user_id, 'Falta tu confirmación',
           (p?p.nombre.split(' ')[0]+': ':'')+'confirma si vas al '+
-          (ev.tipo==='partido'?'partido':'entrenamiento'));
+          (esPartido?'partido':'entrenamiento'));
       });
       const self = this.player(r.player_id);
       if(self?.user_id) this.notify(self.user_id,'Falta tu confirmación','Responde cuando puedas');
     });
+
+    if(ev && porTutor.size){
+      const cuando = this.fechaLarga(ev.inicio);
+      porTutor.forEach(c=>{
+        this.correo('recordatorio', {
+          destinatarioEmail:c.email, destinatario:c.nombre || c.email,
+          club:this.clubNombre(), tipoEvento:esPartido?'partido':'entrenamiento',
+          cuando, lugar:ev.lugar || ev.local || '',
+          nombres:c.nombres.join(', '), nombresPlural:c.nombres.length > 1,
+          enlace:this.appUrl()
+        });
+      });
+    }
+
     DB.save(); return pend.length;
   },
 
@@ -1150,6 +1280,8 @@ const Data = {
   setCallups(eid, ids){
     const d = DB.load();
     d.callups = d.callups.filter(c=>c.event_id!==eid);
+    const ev = this.event(eid);
+    const esPartido = ev && ev.tipo==='partido';
     ids.forEach(pid=>{
       d.callups.push({ id:uid('cu'), event_id:eid, player_id:pid });
       const p = this.player(pid);
@@ -1158,6 +1290,17 @@ const Data = {
           (p?p.nombre.split(' ')[0]:'')+' está convocado');
       });
       if(p?.user_id) this.notify(p.user_id,'Estás convocado','Revisa la hora de citación');
+
+      this.correosDe(pid).forEach(c=>this.correo('convocatoria', {
+        destinatarioEmail:c.email, destinatario:c.nombre || c.email,
+        club:this.clubNombre(),
+        nombres:p ? p.nombre.split(' ')[0] : '',
+        textoConvocatoria: esPartido ? 'está convocado al partido'
+                                : 'está convocado al entrenamiento',
+        cuando:ev ? this.fechaLarga(ev.inicio) : '',
+        lugar:ev ? (ev.lugar || ev.local || '') : '',
+        enlace:this.appUrl()
+      }));
     });
     DB.save();
   },
@@ -1214,11 +1357,25 @@ const Data = {
     d.evaluations.push({ id:uid('ev'), fecha:today(), autor:this.ses.userId, ...ev });
     if(ev.compartida){
       const p = this.player(ev.player_id);
+      const nombre = p ? p.nombre.split(' ')[0] : '';
       this.guardiansOf(ev.player_id).forEach(g=>{
         if(g.user_id) this.notify(g.user_id,'Nueva valoración',
-          'El entrenador ha compartido la valoración de '+(p?p.nombre.split(' ')[0]:''));
+          'El entrenador ha compartido la valoración de '+(nombre||''));
       });
       if(p?.user_id) this.notify(p.user_id,'Nueva valoración','Tu entrenador ha valorado tu progreso');
+
+      // Por correo, solo a las familias: la valoración es el dato más delicado
+      // que sale del club, y el jugador no siempre tiene cuenta.
+      const lasEvals = d.evaluations.filter(x=>x.player_id===ev.player_id && x.compartida);
+      const ultima = lasEvals[lasEvals.length-1];
+      const nota = ultima ? Math.round(((ultima.tecnica||0)+(ultima.fisico||0)
+        +(ultima.tactica||0)+(ultima.actitud||0))/4*10)/10 : null;
+      this.correosDe(ev.player_id).forEach(c=>this.correo('valoracion', {
+        destinatarioEmail:c.email, destinatario:c.nombre || c.email,
+        club:this.clubNombre(), nombre:nombre,
+        resumen: nota !== null ? `${nota} sobre 5` : 'disponible en la aplicación',
+        enlace:this.appUrl()
+      }));
     }
     DB.save();
   },
@@ -1277,11 +1434,23 @@ const Data = {
     const p = { id:uid('po'), autor:this.ses.userId, at:new Date().toISOString(), ...x };
     d.posts.push(p);
     const dest = p.team_id ? this.teamPlayers(p.team_id) : this.players();
+    const yaAvisados = new Set();
     dest.forEach(pl=>{
       this.guardiansOf(pl.id).forEach(g=>{
         if(g.user_id) this.notify(g.user_id, p.titulo, p.cuerpo||'');
       });
       if(pl.user_id) this.notify(pl.user_id, p.titulo, p.cuerpo||'');
+      // Por correo, una vez por tutor y solo si el aviso es para todo el club
+      // o para su categoría: si es de otra categoría no le incumple.
+      this.correosDe(pl.id).forEach(c=>{
+        if(yaAvisados.has(c.email)) return;
+        yaAvisados.add(c.email);
+        this.correo('anuncio', {
+          destinatarioEmail:c.email, destinatario:c.nombre || c.email,
+          club:this.clubNombre(), titulo:p.titulo, cuerpo:p.cuerpo||'',
+          urgente:!!p.urgente, enlace:this.appUrl()
+        });
+      });
     });
     DB.save(); return p;
   },
@@ -1295,6 +1464,11 @@ const Data = {
   notify(userId, titulo, cuerpo){
     DB.load().notifs.push({ id:uid('nt'), user_id:userId, titulo, cuerpo,
       leido:false, at:new Date().toISOString() });
+    DB.save();
+    // La misma noticia sale también como push. Va aquí y no en cada sitio que
+    // avisa (convocatorias, cambios de hora, anuncios, valoraciones) para que
+    // añadir una notificación nueva no obligue a acordarse de las dos cosas.
+    if(typeof FCM !== 'undefined') FCM.enviar(userId, { titulo, cuerpo });
   },
   notifs(){
     if(!this.ses) return [];
@@ -1318,20 +1492,37 @@ const Data = {
     if(!this.is('junta')) throw new Error('Solo la tesorería puede emitir cuotas');
     const d = DB.load();
     let n = 0;
+    const nuevas = [];
     d.enrollments.filter(e=>!e.baja).forEach(e=>{
       if(d.invoices.some(i=>i.player_id===e.player_id && i.periodo===periodo)) return;
       const g = this.guardiansOf(e.player_id)[0];
       const mand = g ? d.mandates.find(m=>m.guardian_id===g.id && m.firmado) : null;
       const desc = +(e.cuota*e.descuento).toFixed(2);
-      d.invoices.push({ id:uid('iv'), player_id:e.player_id,
+      const iv = { id:uid('iv'), player_id:e.player_id,
         guardian_id:g?g.id:null, periodo,
         concepto:'Cuota '+periodo, base:e.cuota, descuento:desc,
         importe:+(e.cuota-desc).toFixed(2),
         estado: mand ? 'en_proceso' : 'sin_mandato',
-        emitido:today(), metodo:'SEPA', avisos:0 });
+        emitido:today(), metodo:'SEPA', avisos:0 };
+      d.invoices.push(iv);
+      nuevas.push(iv);
       n++;
     });
-    DB.save(); return n;
+    DB.save();
+
+    // Aviso al tutor de cada recibo. Solo si ha firmado el mandato: si no lo ha
+    // firmado todavía no hay nada que cobrar y el correo solo le frightens.
+    nuevas.filter(iv => iv.estado === 'en_proceso').forEach(iv=>{
+      const p = this.player(iv.player_id);
+      this.correosDe(iv.player_id).forEach(c=>this.correo('cuota', {
+        destinatarioEmail:c.email, destinatario:c.nombre || c.email,
+        club:this.clubNombre(), periodo:iv.periodo, concepto:iv.concepto,
+        importe:iv.importe.toFixed(2),
+        nombres:p ? p.nombre.split(' ')[0] : '', enlace:this.appUrl()
+      }));
+    });
+
+    return n;
   },
   updateInvoice(id, patch){
     const i = DB.load().invoices.find(x=>x.id===id);

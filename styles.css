@@ -208,6 +208,17 @@ button.row:active{background:#F5F3F1}
 .light{width:9px;height:9px;border-radius:50%;flex:none}
 .light.g{background:var(--ok)} .light.a{background:#CA8A04} .light.r{background:var(--bad)}
 
+/* ===== INTERRUPTOR =====
+   El del interruptor de avisos. No se usa <input type=checkbox> porque el
+   estado hay que leerlo de FCM y no del formulario. */
+.sw{width:44px;height:26px;border-radius:13px;background:#D8D5D0;position:relative;
+  flex:none;transition:background .15s}
+.sw::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;
+  border-radius:50%;background:#fff;transition:transform .15s;
+  box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.sw.on{background:var(--ok)}
+.sw.on::after{transform:translateX(18px)}
+
 /* ===== BOTONES ===== */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
   background:var(--ink);color:#fff;border:1px solid var(--ink);border-radius:var(--r);

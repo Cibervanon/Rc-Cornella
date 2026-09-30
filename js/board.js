@@ -266,21 +266,33 @@ const Board = {
           </select>
           <div class="help">Si lo eliges ahora, quedará asignado al registrarse.</div>
         </div>`:''}
+      ${backendListo()&&((window.RCC_CONFIG||{}).mailFrom||(Backend.cfg||{}).mailFrom)?`
+        <div class="f"><label for="icE">Enviarle el código por correo</label>
+          <input class="in" id="icE" type="email" inputmode="email"
+                 placeholder="persona@correo.com">
+          <div class="help">Opcional. Si lo rellenas, le llegará con las
+            instrucciones para crear su cuenta. Si no, cópialo tú.</div>
+        </div>`:''}
       <button class="btn btn-accent" onclick="Board.crearCodigo('${rol}')">
         Generar código</button>`);
   },
   crearCodigo(rol){
     try{
       const inv = Data.createInvite({ rol, nota:val('icN'),
-        team_id: rol==='entrenador' ? val('icT') : null, max:1, dias:30 });
+        team_id: rol==='entrenador' ? val('icT') : null, max:1, dias:30,
+        email: val('icE'), nombre: val('icN') });
+      const enviado = !!inv.email;
       sheet('Código generado', `
         <div class="codebox">
           <div class="cl">${esc(ROLES[rol].t)}</div>
           <div class="cv">${esc(inv.code)}</div>
           <div class="cd">Un solo uso · caduca el ${esc(inv.caduca)}</div>
         </div>
-        ${hint('Dáselo por un canal privado. Con este código esa persona podrá '+
-          'crear su cuenta con permisos de '+ROLES[rol].t.toLowerCase()+'.','warn')}
+        ${enviado
+          ? hint('Le hemos enviado el código a <strong>'+esc(inv.email)+
+              '</strong> con las instrucciones para crear su cuenta.','ok')
+          : hint('Dáselo por un canal privado. Con este código esa persona podrá '+
+              'crear su cuenta con permisos de '+ROLES[rol].t.toLowerCase()+'.','warn')}
         <button class="btn" onclick="Board.copiar('${inv.code}')">
           ${I.copy(17)} Copiar código</button>
         <div style="height:8px"></div>

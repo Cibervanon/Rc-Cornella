@@ -16,11 +16,61 @@ const Gate = {
   invite: null,
   err: null,
   busy: false,
-  fundar: { n:1, club:{}, cats:[...CAT_PRESET] },
+  pendienteGoogle: null,   // {nombre, email} cuando se ha entrado con Google
+  googlePid: false,        // evita pedir los datos de Google en cada repintado
+  /* El estado del asistente va en `asistente`, no en `fundar`: en un literal de
+     objeto, si una clave se repite gana la ultima, y aqui `fundar` esta tambien
+     como metodo que pinta la pantalla. Con el estado en `fundar` lo machacaba el
+     metodo, `this.asistente.cats` era undefined y el alta del club reventaba. */
+  asistente: { n:1, club:{}, cats:[...CAT_PRESET] },
 
   reset(s){ this.step=s; this.err=null; Shell.render(); },
 
+  /** Olvida la cuenta de Google pendiente. Al volver al inicio, quien entre
+      otra vez con Google tiene que poder leer de nuevo su nombre y email. */
+  resetearGoogle(){ this.pendienteGoogle=null; this.googlePid=false; },
+
+  /** Botón de Google. Solo aparece si hay servidor y hay cliente OAuth. */
+  conGoogle(){
+    return backendListo() && !!(Backend.cfg||{}).googleClientId;
+  },
+
+  /** Cuando hay sesión abierta pero ningún permiso en el club (por ejemplo
+      alguien que acaba de entrar con Google), el único camino posible es un
+      código. Se fuerza esa pantalla. */
+  revisarSesion(){
+    if(!backendListo() || !Backend.uid) return;
+    if(Data.myRoles().length) return;
+    if(!Data.clubExists()) return;
+    this.step = 'codigo';
+    this.cargarCuentaGoogle();
+  },
+
+  /* El nombre y el email de la cuenta de Google no están en el dispositivo:
+     hay que preguntarlos al servidor. Se piden una sola vez y, cuando llegan,
+     se repinta la pantalla. Guardar la Promise aquí era un error: `pendiente-
+     Google` quedaba siendo un Promise, no un objeto, y al pintarlo aparecía
+     "Has entrado con undefined". */
+  cargarCuentaGoogle(){
+    if(this.googlePid || this.pendienteGoogle) return;
+    this.googlePid = true;
+    this.cuentaGoogle().then(c => {
+      this.googlePid = false;
+      if(c) this.pendienteGoogle = c;
+      if(this.step === 'codigo') Shell.render();
+    }).catch(()=>{ this.googlePid = false; });
+  },
+
+  async cuentaGoogle(){
+    const u = await Backend.usuarioActual();
+    if(!u) return null;
+    const md = u.user_metadata || {};
+    return { nombre: md.nombre || md.full_name || md.name || u.email || '',
+             email: u.email || '' };
+  },
+
   render(){
+    this.revisarSesion();
     const hayClub = Data.clubExists();
     if(this.step === null) this.step = hayClub ? 'elegir' : 'bienvenida';
 
@@ -60,6 +110,7 @@ const Gate = {
       <span class="ct"><b>Ya tengo cuenta</b><span>Entrar con mi email</span></span>
       <span class="cg">${I.chevron(18)}</span>
     </button>
+    ${this.botonGoogle()}
     <div class="t-sec">Primera vez</div>
     <button class="choice" onclick="Gate.reset('codigo')">
       <span class="ci">${I.key(20)}</span>
@@ -67,8 +118,30 @@ const Gate = {
         <span>Para familias, jugadores y cuerpo técnico</span></span>
       <span class="cg">${I.chevron(18)}</span>
     </button>
-    ${hint('¿No tienes código? Las familias lo reciben al inscribir a su hijo. '+
+    ${hint('¿No tienes código? Las familias lo reciben alcribir a su hijo. '+
       'El cuerpo técnico lo recibe de la junta directiva.')}`;
+  },
+
+  botonGoogle(){
+    if(!this.conGoogle()) return '';
+    return `<button class="choice" onclick="Gate.google()" style="margin-top:8px">
+      <span class="ci" style="font-weight:800;font-size:16px;color:var(--t2)">G</span>
+      <span class="ct"><b>Continuar con Google</b>
+        <span>Sin contraseña, con tu cuenta de Gmail</span></span>
+      <span class="cg">${I.chevron(18)}</span>
+    </button>`;
+  },
+
+  async google(){
+    if(this.busy) return;
+    this.busy = true; this.err = null; Shell.render();
+    try{
+      await Backend.entrarConGoogle();
+    }catch(e){
+      this.err = e.message || 'No se ha podido conectar con Google';
+      this.busy = false; Shell.render();
+    }
+    // Si todo va bien, el navegador se va y no se vuelve aquí.
   },
 
   /* ---------- paso 1: validar el código ANTES de pedir datos ---------- */
@@ -76,6 +149,9 @@ const Gate = {
     <button class="back" onclick="Gate.reset('elegir')">${I.chevL(16)} Volver</button>
     <h2>Tu código de acceso</h2>
     <p class="lead">Son 6 letras y números. Te lo ha dado el club.</p>
+    ${this.pendienteGoogle ? `<div class="alert alert-ok">${I.check(16)}
+      <span>Has entrado con <strong>${esc(this.pendienteGoogle.email)}</strong>.
+        Escribe el código que te ha dado el club para activarlo.</span></div>` : ''}
     <div class="f">
       <input class="in code" id="gCode" maxlength="6" autocomplete="off"
              autocapitalize="characters" placeholder="ABC123"
@@ -84,69 +160,145 @@ const Gate = {
       <div class="help">El código determina tu perfil dentro de la aplicación.
         No se puede elegir a mano.</div>
     </div>
-    <button class="btn" onclick="Gate.checkCode()">Comprobar código</button>
+    <button class="btn" onclick="Gate.checkCode()" ${this.busy?'disabled':''}>
+      ${this.busy?'Comprobando…':'Comprobar código'}</button>
     <div class="links">
       <button class="link" onclick="Gate.reset('login')">Ya tengo cuenta</button>
     </div>`;
   },
 
-  checkCode(){
+  async checkCode(){
+    if(this.busy) return;
     const c = val('gCode');
-    const r = Data.peekCode(c);
-    if(!r.ok){ this.err = r.error; Shell.render(); return; }
-    this.rolDetectado = r.rol;
-    this.invite = r.invite;
-    this.err = null;
-    this.step = 'datos';
+    if(!c){ this.err='Escribe el código que te ha dado el club'; return Shell.render(); }
+    this.busy = true; this.err = null; Shell.render();
+    try{
+      const r = backendListo() ? await Backend.comprobarCodigo(c) : Data.peekCode(c);
+      if(!r.ok){ this.err = r.error; this.busy=false; return Shell.render(); }
+      this.rolDetectado = r.rol;
+      // En la nube solo hace falta el equipo: el contador de usos lo lleva el
+      // servidor, y la tabla de códigos no es editable fuera de la junta.
+      this.invite = backendListo() ? { code:c, rol:r.rol, team_id:r.team_id }
+                                   : r.invite;
+      this.err = null;
+      this.step = 'datos';
+    }catch(e){
+      this.err = this.msgDeCodigo(e);
+    }
+    this.busy = false;
     Shell.render();
+  },
+
+  /* El RPC contesta con su propio texto; se traduce solo si parece un fallo
+     técnico, para no tapar el mensaje de "código caducado" o "ya usado". */
+  msgDeCodigo(e){
+    const m = (e && e.message) || '';
+    if(/function .* does not exist/i.test(m))
+      return 'El servidor todavía no tiene instaladas las funciones del club. '+
+             'Avisa a la persona que lo administra.';
+    return m || 'No se ha podido comprobar el código';
   },
 
   /* ---------- paso 2: datos, ya sabiendo el rol ---------- */
   datos(){
     const R = ROLES[this.rolDetectado];
+    const g = this.pendienteGoogle;
+    /* Si vienes de Google mandan sus datos; si no, se recuperan de lo que
+       habia escrito, porque un error al validar repinta el formulario entero
+       y sin esto perderia todo lo tecleado. */
+    const nombre = g ? g.nombre : (this.vNombre || '');
+    const email  = g ? g.email  : (this.vEmail  || '');
     return `
     <button class="back" onclick="Gate.reset('codigo')">${I.chevL(16)} Cambiar de código</button>
     <div class="alert alert-ok">${I.check(16)}
       <span>Código correcto. Vas a crear tu cuenta como
         <strong>${esc(R.t.toLowerCase())}</strong>.</span></div>
-    <h2>Crea tu cuenta</h2>
+    <h2>${g?'Completa tu perfil':'Crea tu cuenta'}</h2>
     <p class="lead">${esc(R.d)}.</p>
     <div class="f">
       <label for="rN">Nombre y apellidos</label>
-      <input class="in" id="rN" autocomplete="name" placeholder="Marta Soler Vidal">
+      <input class="in" id="rN" autocomplete="name" placeholder="Marta Soler Vidal"
+        value="${esc(nombre)}">
     </div>
     <div class="f">
       <label for="rE">Email</label>
-      <input class="in" id="rE" type="email" inputmode="email" autocomplete="email">
+      <input class="in" id="rE" type="email" inputmode="email" autocomplete="email"
+        value="${esc(email)}" ${g?'readonly':''}>
       <div class="help">Lo usarás para entrar y recibir los avisos del club.</div>
     </div>
     <div class="f">
       <label for="rT">Teléfono ${this.rolDetectado==='familia'?'':'<span class="muted">(opcional)</span>'}</label>
       <input class="in" id="rT" type="tel" inputmode="tel" autocomplete="tel">
     </div>
+    ${g ? '' : `
     <div class="f">
       <label for="rP">Contraseña</label>
       <input class="in" id="rP" type="password" autocomplete="new-password">
       <div class="help">Mínimo 8 caracteres.</div>
-    </div>
+    </div>`}
     <label class="check">
       <input type="checkbox" id="rOk">
       <span>He leído y acepto la política de privacidad del club. Si inscribo a
         menores, confirmo que soy su tutor legal.</span>
     </label>
-    <button class="btn btn-accent" style="margin-top:8px" onclick="Gate.doRegister()">
-      Crear mi cuenta</button>`;
+    <button class="btn btn-accent" style="margin-top:8px" onclick="Gate.doRegister()"
+      ${this.busy?'disabled':''}>${this.busy?'Un momento…':'Crear mi cuenta'}</button>`;
   },
 
-  doRegister(){
+  async doRegister(){
+    if(this.busy) return;
+    /* Se guardan los campos antes de validar: si algo falla, el formulario se
+       repinta y sin esto se perderia lo escrito. La contraseña se conserva solo
+       en memoria (nunca se vuelve a pintar en el HTML) y no se pisa con el
+       campo vacio que deja el repintado. */
+    const passActual = val('rP');
+    if(passActual) this.vPass = passActual;
+    this.vNombre = val('rN'); this.vEmail = val('rE'); this.vTel = val('rT');
     if(!chk('rOk')){ this.err='Debes aceptar la política de privacidad para continuar';
       return Shell.render(); }
+    const nombre = this.vNombre, email = this.vEmail, tel = this.vTel;
+    if(!this.pendienteGoogle && (this.vPass||'').length < 8){
+      this.err='La contraseña debe tener al menos 8 caracteres'; return Shell.render();
+    }
+
+    this.busy = true; this.err = null; Shell.render();
     try{
-      Data.register({ nombre:val('rN'), email:val('rE'), password:val('rP'),
-        tel:val('rT'), code:this.invite.code });
-      this.err=null; this.step=null;
-      Shell.afterAuth(true);
-    }catch(e){ this.err = e.message; Shell.render(); }
+      let userId = null, resuelto = null;
+
+      if(backendListo()){
+        // 1. Cuenta en Supabase Auth (si aún no la tenía, p. ej. con Google).
+        // 2. Consumo del código en el servidor: es el paso que concede el rol.
+        const chk = await Backend.comprobarCodigo(this.invite.code);
+        if(!chk.ok) throw new Error(chk.error);
+
+        if(!this.pendienteGoogle){
+          const alta = await Backend.registrar({ email, password:val('rP'), nombre, tel });
+          if(alta.pendiente) throw new Error(
+            'Te hemos enviado un correo para confirmar la dirección. '+
+            'Confírmala y vuelve a intentarlo.');
+          userId = alta.uid;
+        }else{
+          userId = Backend.uid;
+        }
+
+        const uso = await Backend.gastarCodigo(this.invite.code);
+        if(!uso || !uso.ok) throw new Error((uso && uso.error) || 'Ese código ya no está disponible');
+        resuelto = { ok:true, rol:uso.rol, invite:{ team_id:uso.team_id } };
+      }
+
+      /* La contraseña tambien se pasa. Sin nube no hay Supabase Auth que la
+         guarde por su cuenta, asi que si no viaja aqui el alta falla siempre
+         con "Falta la contraseña". Con Google no hace falta: ya hay cuenta. */
+      Data.register({ nombre, email, tel,
+        password: this.pendienteGoogle ? null : this.vPass,
+        code:this.invite.code, userId, resuelto });
+      this.err=null; this.step=null; this.pendienteGoogle=null;
+      await Shell.afterAuth(true);
+    }catch(e){
+      this.err = e.message || 'No se ha podido crear la cuenta';
+    }
+    this.busy = false;
+    Shell.render();
   },
 
   /* ---------- inicio de sesión ---------- */
@@ -157,14 +309,17 @@ const Gate = {
     <p class="lead">Entra con el email con el que te registraste.</p>
     <div class="f">
       <label for="lE">Email</label>
-      <input class="in" id="lE" type="email" inputmode="email" autocomplete="email">
+      <input class="in" id="lE" type="email" inputmode="email" autocomplete="email"
+        value="${esc(this.vEmail||'')}">
     </div>
     <div class="f">
       <label for="lP">Contraseña</label>
       <input class="in" id="lP" type="password" autocomplete="current-password"
              onkeydown="if(event.key==='Enter')Gate.doLogin()">
     </div>
-    <button class="btn" onclick="Gate.doLogin()">Entrar</button>
+    <button class="btn" onclick="Gate.doLogin()" ${this.busy?'disabled':''}>
+      ${this.busy?'Entrando…':'Entrar'}</button>
+    ${this.conGoogle() ? `<div class="or"><span>o</span></div>${this.botonGoogle()}` : ''}
     <div class="links">
       ${Data.clubExists() ? `<button class="link" onclick="Gate.reset('codigo')">
         Tengo un código y aún no tengo cuenta</button>` : ''}
@@ -172,26 +327,70 @@ const Gate = {
     </div>`;
   },
 
-  doLogin(){
+  async doLogin(){
+    if(this.busy) return;
+    const email = val('lE'), password = val('lP');
+    /* El email se recuerda: si la contrasena falla, el formulario se repinta y
+       no hace falta volver a escribirlo. La contrasena nunca se guarda. */
+    this.vEmail = email;
+    if(!email || !password){ this.err='Escribe tu email y tu contraseña';
+      return Shell.render(); }
+    this.busy = true; this.err = null; Shell.render();
     try{
-      Data.login(val('lE'), val('lP'));
+      if(backendListo()){
+        const r = await Backend.entrarConPassword(email, password);
+        if(!r.roles.length)
+          throw new Error('Tu cuenta existe pero todavía no tiene acceso a este club. '+
+                          'Necesitas un código de la junta directiva.');
+        Data.setSession({ userId:r.uid, rol:r.roles[0] });
+      }else{
+        Data.login(email, password);
+      }
       this.err=null; this.step=null;
-      Shell.afterAuth(false);
-    }catch(e){ this.err=e.message; Shell.render(); }
+      await Shell.afterAuth(false);
+    }catch(e){
+      this.err = e.message || 'No se ha podido iniciar sesión';
+    }
+    this.busy = false;
+    Shell.render();
   },
 
   forgot(){
+    if(backendListo()){
+      const email = val('lE');
+      sheet('Recuperar el acceso', `
+        <div class="f"><label for="fE">Email con el que te registraste</label>
+          <input class="in" id="fE" type="email" inputmode="email"
+                 value="${esc(email)}" placeholder="nombre@correo.com"></div>
+        <div class="help">Te enviaremos un enlace para poner una contraseña nueva.
+          Puede tardar un par de minutos: mira también la carpeta de spam.</div>
+        <button class="btn" onclick="Gate.enviarRecuperacion()">Enviar enlace</button>
+        <button class="btn btn-2" onclick="closeSheet()">Cancelar</button>`);
+      return;
+    }
     sheet('Recuperar el acceso', `
       ${hint('En esta versión la recuperación por email todavía no está activa. '+
         'Escribe a la junta directiva del club y te darán acceso de nuevo.')}
       <button class="btn btn-2" onclick="closeSheet()">Entendido</button>`);
   },
 
+  async enviarRecuperacion(){
+    const email = val('fE');
+    if(!Data.validEmail(email)){ toast('Escribe un email válido'); return; }
+    try{
+      await Backend.recuperarPassword(email);
+      closeSheet();
+      toast('Si esa cuenta existe, recibirás el enlace en unos minutos');
+    }catch(e){
+      toast('No se ha podido enviar: ' + (e.message || 'revisa tu conexión'));
+    }
+  },
+
   /* ============================================================
      FUNDAR EL CLUB — asistente de 3 pasos
      ============================================================ */
   fundar(){
-    const F = this.fundar;
+    const F = this.asistente;
     const bar = `<div class="steps">${[1,2,3].map(i=>
       `<i class="${i<=F.n?'on':''}"></i>`).join('')}</div>
       <div class="stepn">Paso ${F.n} de 3</div>`;
@@ -210,7 +409,7 @@ const Gate = {
       <button class="btn" onclick="Gate.fundarPaso1()">Continuar</button>`;
 
     if(F.n===2) return `
-      <button class="back" onclick="Gate.fundar.n=1;Shell.render()">${I.chevL(16)} Atrás</button>
+      <button class="back" onclick="Gate.asistente.n=1;Shell.render()">${I.chevL(16)} Atrás</button>
       ${bar}
       <h2>Categorías</h2>
       <p class="lead">Ajusta las cuotas o quita las que no tenga el club.
@@ -222,35 +421,37 @@ const Gate = {
           <div class="row-e" style="flex-direction:row;align-items:center;gap:6px">
             <input class="in" style="width:78px;min-height:40px;padding:7px 9px;
               text-align:right" type="number" min="0" value="${c.cuota}"
-              onchange="Gate.fundar.cats[${i}].cuota=+this.value">
+              onchange="Gate.asistente.cats[${i}].cuota=+this.value">
             <button class="ibtn" title="Quitar" onclick="Gate.quitarCat(${i})">${I.trash(17)}</button>
           </div>
         </div>`).join('')}
       </div>
       <button class="btn btn-2" onclick="Gate.addCat()">${I.plus(17)} Añadir categoría</button>
       <div style="height:10px"></div>
-      <button class="btn" onclick="Gate.fundar.n=3;Shell.render()">Continuar</button>`;
+      <button class="btn" onclick="Gate.asistente.n=3;Shell.render()">Continuar</button>`;
 
     return `
-      <button class="back" onclick="Gate.fundar.n=2;Shell.render()">${I.chevL(16)} Atrás</button>
+      <button class="back" onclick="Gate.asistente.n=2;Shell.render()">${I.chevL(16)} Atrás</button>
       ${bar}
       <h2>Tu cuenta de administrador</h2>
       <p class="lead">Quedas como junta directiva. Desde aquí invitarás al resto.</p>
       <div class="f"><label for="fN">Nombre y apellidos</label>
-        <input class="in" id="fN" autocomplete="name"></div>
+        <input class="in" id="fN" autocomplete="name" value="${esc(this.vNombre||'')}"></div>
       <div class="f"><label for="fE">Email</label>
-        <input class="in" id="fE" type="email" inputmode="email" autocomplete="email"></div>
+        <input class="in" id="fE" type="email" inputmode="email" autocomplete="email"
+          value="${esc(this.vEmail||'')}"></div>
       <div class="f"><label for="fP">Contraseña</label>
         <input class="in" id="fP" type="password" autocomplete="new-password">
         <div class="help">Mínimo 8 caracteres.</div></div>
-      <button class="btn btn-accent" onclick="Gate.doFundar()">Crear el club</button>`;
+      <button class="btn btn-accent" onclick="Gate.doFundar()" ${this.busy?'disabled':''}>
+        ${this.busy?'Un momento…':'Crear el club'}</button>`;
   },
 
   fundarPaso1(){
     const n = val('cN');
     if(!n){ this.err='El club necesita un nombre'; return Shell.render(); }
-    this.fundar.club = { nombre:n, ciudad:val('cC'), temporada:val('cT') };
-    this.fundar.n = 2; this.err=null; Shell.render();
+    this.asistente.club = { nombre:n, ciudad:val('cC'), temporada:val('cT') };
+    this.asistente.n = 2; this.err=null; Shell.render();
   },
   addCat(){
     sheet('Nueva categoría', `
@@ -263,20 +464,55 @@ const Gate = {
   addCatOk(){
     const n = val('ncN');
     if(!n){ toast('Ponle nombre a la categoría'); return; }
-    this.fundar.cats.push({ n, cuota:+val('ncC')||0 });
+    this.asistente.cats.push({ n, cuota:+val('ncC')||0 });
     closeSheet(); Shell.render();
   },
   quitarCat(i){
-    if(this.fundar.cats.length<=1){ toast('Debe quedar al menos una categoría'); return; }
-    this.fundar.cats.splice(i,1); Shell.render();
+    if(this.asistente.cats.length<=1){ toast('Debe quedar al menos una categoría'); return; }
+    this.asistente.cats.splice(i,1); Shell.render();
   },
   doFundar(){
-    try{
-      Data.foundClub({ clubNombre:this.fundar.club.nombre, ciudad:this.fundar.club.ciudad,
-        temporada:this.fundar.club.temporada, userNombre:val('fN'), email:val('fE'),
-        password:val('fP'), categorias:this.fundar.cats });
-      this.err=null; this.step=null;
-      Shell.afterAuth(true);
-    }catch(e){ this.err=e.message; Shell.render(); }
+    if(this.busy) return;
+    /* Los campos se leen ANTES de repintar. Shell.render() rehace el formulario
+       entero, asi que leerlos despues devuelve cadena vacia y el alta fallaba
+       siempre con "el email no tiene un formato valido". */
+    const nombre = val('fN'), email = val('fE'), password = val('fP');
+    this.vNombre = nombre; this.vEmail = email;
+    this.busy = true; this.err = null; Shell.render();
+    (async () => {
+      try{
+        let userId = null, ids = null, familyCode = null;
+
+        if(backendListo()){
+          // Los identificadores se generan aquí y se pasan a ambos lados, para
+          // que la copia del servidor y la del dispositivo sean la misma.
+          ids = Data.idsParaFundar();
+          familyCode = makeCode();
+          const alta = await Backend.registrar({ email, password, nombre });
+          if(alta.pendiente) throw new Error(
+            'Te hemos enviado un correo para confirmar la dirección. '+
+            'Confírmala y vuelve a abrir la aplicación para fundar el club.');
+          userId = alta.uid;
+          await Backend.fundarClub({
+            p_club_id: ids.club_id, p_season_id: ids.season_id,
+            p_nombre: this.asistente.club.nombre, p_ciudad: this.asistente.club.ciudad,
+            p_temporada: this.asistente.club.temporada, p_user_id: userId,
+            p_nombre_usuario: nombre, p_email: email,
+            p_categorias: this.asistente.cats.map(c => ({ n:c.n, cuota:+c.cuota || 0 })),
+            p_family_code: familyCode
+          });
+        }
+
+        Data.foundClub({ clubNombre:this.asistente.club.nombre, ciudad:this.asistente.club.ciudad,
+          temporada:this.asistente.club.temporada, userNombre:nombre, email, password,
+          categorias:this.asistente.cats, userId, ids, familyCode });
+        this.err=null; this.step=null;
+        await Shell.afterAuth(true);
+      }catch(e){
+        this.err = e.message || 'No se ha podido crear el club';
+      }
+      this.busy = false;
+      Shell.render();
+    })();
   }
 };

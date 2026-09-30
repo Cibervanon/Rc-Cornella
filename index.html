@@ -34,6 +34,7 @@
 
 <div id="toast" class="toast hidden" role="status"></div>
 
+<script src="js/config.js"></script>
 <script src="js/icons.js"></script>
 <script src="js/store.js"></script>
 <script src="js/ui.js"></script>
@@ -42,16 +43,41 @@
 <script src="js/family.js"></script>
 <script src="js/match.js"></script>
 <script src="js/board.js"></script>
+<script src="js/backend.js"></script>
+<script src="js/fcm.js"></script>
 <script src="js/shell.js"></script>
 <script>
-/* Modo sin conexión: se registra en silencio y no molesta si falla. */
+/* Modo sin conexión: se registra en silencio y no molesta si falla.
+   Ojo: dentro del APK (Capacitor) el origen no es un servidor web real y el
+   registro suele fallar. No es un problema: la app se sirve desde el propio
+   paquete, asi que siempre esta disponible aunque no haya service worker.
+   Lo que se pierde sin el es el modo sin conexion y los avisos push, que
+   necesitan la web. Por eso el fallo se avisa en consola en vez de tragarse:
+   asi se sabe cuando se esta probando en la web y cuando en el movil. */
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js')
+      .catch(err => console.warn('[sw] sin modo sin conexión en este entorno:',
+        err && err.message));
   });
 }
 window.addEventListener('online',  () => { if (window.Shell) Shell.conexion(true);  });
 window.addEventListener('offline', () => { if (window.Shell) Shell.conexion(false); });
+
+/* Al tocar un aviso con la app abierta, se lleva a la pantalla que toque en vez
+   de abrir una pestaña nueva. Lo manda sw.js en notificationclick. */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', e => {
+    if (!e.data || e.data.tipo !== 'navegar' || !window.Shell) return;
+    /* El service worker solo puede pasar un caminho. La navegación se resuelve
+       en la app, que es quien sabe qué vista corresponde a cada URL. */
+    const d = e.data.url || '/';
+    const m = d.match(/evento\/([\w-]+)/);
+    if (m) { Shell.go('evento', { eventId: m[1] }); return; }
+    if (/\/?(cuotas|avisos|agenda)/.test(d)) { Shell.goTab('home'); return; }
+    Shell.render();
+  });
+}
 </script>
 </body>
 </html>

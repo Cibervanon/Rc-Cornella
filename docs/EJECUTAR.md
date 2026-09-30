@@ -68,18 +68,21 @@ Genera `app-release-signed.apk`. Requiere tener instalado el JDK y el SDK de And
 
 ### Opción C — Capacitor (si quieres funciones nativas)
 
-Solo si más adelante necesitas cámara, notificaciones push nativas o biometría:
+Solo si necesitas cámara, notificaciones push nativas o biometría. Empaqueta los archivos dentro de la app, así que **funciona sin dominio desde el primer arranque**.
+
+**Importante:** no uses `--web-dir=.` (copiaría `node_modules` y la carpeta `android` dentro de la propia app). Los archivos web se copian a una carpeta `www`:
 
 ```bash
 npm init -y
 npm install @capacitor/core @capacitor/cli @capacitor/android
-npx cap init "RC Cornellà" com.rccornella.app --web-dir=.
+mkdir -p www && cp -r index.html styles.css sw.js manifest.json js icon-*.png apple-touch-icon.png favicon.png www/
+npx cap init "RC Cornellà" com.rccornella.app --web-dir=www
 npx cap add android
 npx cap sync
 npx cap open android
 ```
 
-Se abre Android Studio y desde ahí se compila el APK. Esta opción empaqueta los archivos dentro de la app, así que **funciona sin dominio ni conexión desde el primer arranque**.
+Cada vez que cambies algo, repite el `cp` y `npx cap sync`. Desde Android Studio: *Build → Build APK(s)*.
 
 ### Qué opción elegir
 
