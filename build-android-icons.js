@@ -82,12 +82,19 @@ function iconoRedondo(size) {
 }
 
 /* Capa de primer plano del icono adaptativo: solo el escudo, transparente.
-   Android recorta esta capa en circulo/rombo, asi que el escudo debe ocupar la
-   zona segura central (66-72dp de los 108dp) sin salirse. El escudo abarca 44
-   unidades de la rejilla, de ahi el factor: 44 * e / tam = 0.62. */
+   Android recorta esta capa en circulo/rombo, asi que el escudo debe caber en
+   la zona segura central: un circulo de 66 de los 108dp, radio 33. El escudo
+   mide 38x44 (+2.4 de trazo), su semidiagonal es ~30.3 unidades de la rejilla,
+   de ahi el factor maximo: 0.3056 * 64 / 30.3 = 0.645. Con 0.90 el borde
+   superior se salia y Android lo recortaba al enmascarar: por eso se veia
+   cortado. Y centrado en 0.5, no en 0.47: la zona segura esta centrada en la
+   capa, no un poco mas arriba. */
 function foregroundAdaptativo(size) {
-  const e = (size / 64) * 0.90;
-  return svgEnv(size, escudo(size / 2, size * 0.47, e, false));
+  const e = (size / 64) * 0.62;
+  /* La forma del escudo esta centrada en la unidad 33 de la rejilla (no en la
+     32): escudo() la coloca a cy + e, asi que pasando cy = mitad - e queda el
+     escudo EXACTAMENTE en el centro de la capa. */
+  return svgEnv(size, escudo(size / 2, size * 0.5 - e, e, false));
 }
 
 async function png(destino, svg, size) {
@@ -155,6 +162,35 @@ async function generar() {
   fs.writeFileSync(path.join(any, 'ic_launcher.xml'), xml);
   fs.writeFileSync(path.join(any, 'ic_launcher_round.xml'), xml);
   console.log('  mipmap-anydpi-v26/ic_launcher.xml  (adaptativo)');
+
+  /* EL COLOR DEL FONDO. El XML de arriba referencia
+     @color/ic_launcher_background, y ese color lo crea Capacitor en BLANCO
+     (#FFFFFF). El escudo es blanco con contorno negro: sobre blanco se funde
+     con el fondo y el icono se ve roto. Si el script no escribe este fichero,
+     el icono adaptativo sale con el fondo equivocado. */
+  fs.writeFileSync(path.join(RES, 'values', 'ic_launcher_background.xml'),
+    '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n' +
+    '    <color name="ic_launcher_background">' + NEGRO + '</color>\n' +
+    '</resources>\n');
+  console.log('  values/ic_launcher_background.xml  fondo ' + NEGRO);
+
+  /* Splash del drawable por defecto. Capacitor crea uno con su robot gris en
+     drawable/: si no se sobreescribe, ese robot asoma en los arranques donde
+     no encaja ninguna densidad concreta. */
+  fs.mkdirSync(path.join(RES, 'drawable'), { recursive: true });
+  await sharp(Buffer.from(splashSvg(480, 800))).resize(480, 800)
+    .toFile(path.join(RES, 'drawable', 'splash.png'));
+  console.log('  drawable/splash.png  480x800  ' +
+    Math.round(fs.statSync(path.join(RES, 'drawable', 'splash.png')).size / 1024) + ' KB');
+
+  /* Icono maskable del manifest WEB (build-icons.py lo genera con cairosvg,
+     que en Windows es un problema). El fondo SI puede ir a sangre completa:
+     la zona segura solo limita el contenido. Sin lema, por lo mismo que en
+     foregroundAdaptativo. */
+  const eWeb = (512 / 64) * 0.62;
+  await png(path.join(__dirname, 'icon-maskable-512.png'),
+    svgEnv(512, `<rect width="512" height="512" fill="${NEGRO}"/>` +
+      escudo(256, 256 - eWeb, eWeb, false)), 512);
 
   for (const { d, w, h } of SPLASH) {
     const dir = path.join(RES, `drawable-${d}`);

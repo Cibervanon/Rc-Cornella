@@ -58,11 +58,16 @@ def escudo(cx, cy, escala, con_lema=True):
     </g>
     {lema}'''
 
-def icono(size, maskable=False, marco=True, fondo=NEGRO):
-    """maskable: el contenido se encoge al 62% para la zona segura de Android."""
+def icono(size, maskable=False, marco=True, fondo=NEGRO, lema=True):
+    """maskable: el contenido se encoge al 62% para la zona segura de Android.
+    En el maskable el lema va sin dibujar: el texto de "DES DE 1931" ensancha
+    el contenido y el escudo se recortaba al enmascarar en circulo."""
     if maskable:
         escala = size / 64 * 0.62
-        cy = size * 0.47
+        # La forma del escudo esta centrada en la unidad 33 de la rejilla (no
+        # en la 32): escudo() la coloca a cy + escala, asi que pasando
+        # cy = mitad - escala el escudo queda EXACTAMENTE en el centro.
+        cy = size * 0.5 - escala
         borde = ''
         radio = 0
     else:
@@ -81,7 +86,7 @@ def icono(size, maskable=False, marco=True, fondo=NEGRO):
      width="{size}" height="{size}" viewBox="0 0 {size} {size}">
   {fondo_el}
   {borde}
-  {escudo(size/2, cy, escala, con_lema=(size >= 180))}
+  {escudo(size/2, cy, escala, con_lema=(lema and size >= 180))}
 </svg>'''
 
 def guardar(nombre, svg, size):
@@ -92,7 +97,7 @@ def guardar(nombre, svg, size):
 print('Generando iconos del Rugby Club Cornellà')
 guardar('icon-192.png',           icono(192),                192)
 guardar('icon-512.png',           icono(512),                512)
-guardar('icon-maskable-512.png',  icono(512, maskable=True), 512)
+guardar('icon-maskable-512.png',  icono(512, maskable=True, lema=False), 512)
 guardar('icon-1024.png',          icono(1024),               1024)
 guardar('apple-touch-icon.png',   icono(180),                180)
 guardar('favicon.png',            icono(64,  marco=False),   64)
