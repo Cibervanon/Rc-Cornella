@@ -743,6 +743,16 @@ const Data = {
     d.goals       = d.goals.filter(g=>g.player_id!==pid);
     d.signatures  = d.signatures.filter(s=>s.player_id!==pid);
     d.invoices    = d.invoices.filter(i=>i.player_id!==pid);
+    // Los partidos ya finalizados son historial deportivo y se conservan íntegros
+    // (borrar sus acciones falsearía el marcador). En los que aún no han empezado
+    // o están en curso sí se retira al jugador para no dejar alineaciones inválidas.
+    (d.matches||[]).forEach(m=>{
+      if(m.estado==='final') return;
+      Object.keys(m.titulares||{}).forEach(k=>{
+        if(m.titulares[k]===pid) delete m.titulares[k];
+      });
+      if(Array.isArray(m.banquillo)) m.banquillo = m.banquillo.filter(x=>x!==pid);
+    });
     DB.save();
   },
   movePlayer(pid, teamId){
@@ -932,6 +942,7 @@ const Data = {
     let m = d.matches.find(x=>x.event_id===eventId);
     if(!m){
       const ev = this.event(eventId);
+      if(!ev) throw new Error('El evento ya no existe');
       const t = this.team(ev.team_id);
       m = { id:uid('mt'), event_id:eventId, team_id:ev.team_id,
         formacion: FORMACION_POR_DEFECTO(t?.cat?.nombre || t?.nombre),
@@ -1117,7 +1128,12 @@ const Data = {
   minutosJugados(eventId){
     const m = this.match(eventId);
     if(!m) return [];
-    const fin = m.estado==='final' ? m.duracion_parte*2 : this.minutoActual(m);
+    // Al finalizar, pausar() ya sincroniza m.minuto con el reloj real, y
+    // ajustarMinuto() permite corregirlo después; la duración de la categoría es
+    // solo el valor por defecto previsto, no lo que realmente se jugó.
+    const fin = m.estado==='final'
+      ? (typeof m.minuto==='number' ? m.minuto : m.duracion_parte*2)
+      : this.minutoActual(m);
     const cambios = m.acciones.filter(a=>a.tipo==='cambio');
     // reconstruimos la alineación inicial deshaciendo los cambios
     const inicial = { ...m.titulares };
@@ -1234,6 +1250,7 @@ const Data = {
     d.rsvp = d.rsvp.filter(r=>r.event_id!==id);
     d.callups = d.callups.filter(c=>c.event_id!==id);
     d.attendance = d.attendance.filter(a=>a.event_id!==id);
+    if(d.matches) d.matches = d.matches.filter(m=>m.event_id!==id);
     DB.save();
   },
 
@@ -1560,8 +1577,15 @@ const Data = {
   signMandate(gid, iban, titular){
     const d = DB.load();
     const clean = (iban||'').replace(/\s/g,'').toUpperCase();
-    if(clean.length < 20 || !/^ES\d{2}/.test(clean))
-      throw new Error('El IBAN no parece correcto. Debe empezar por ES y tener 24 caracteres.');
+    const mal = 'El IBAN no es válido. Debe empezar por ES, tener 24 caracteres y ser un IBAN real.';
+    if(!/^ES\d{22}$/.test(clean)) throw new Error(mal);
+    // Comprobación mod-97 (ISO 13616). Antes solo se miraba el prefijo, así que
+    // se aceptaban y guardaban IBAN inexistentes. El resto se sigue guardando
+    // enmascarado por privacidad; esto solo evita guardar basura.
+    const num = (clean.slice(4) + clean.slice(0,4)).replace(/[A-Z]/g, c=>String(c.charCodeAt(0)-55));
+    let resto = 0;
+    for(const dig of num) resto = (resto*10 + Number(dig)) % 97;
+    if(resto !== 1) throw new Error(mal);
     let m = d.mandates.find(x=>x.guardian_id===gid);
     const masked = clean.slice(0,6)+' •••• •••• '+clean.slice(-4);
     if(!m){ m = { id:uid('md'), guardian_id:gid }; d.mandates.push(m); }
@@ -1660,7 +1684,8 @@ const Data = {
     const att = ps.map(p=>this.attStats(p.id).pct).filter(x=>x!==null);
     // reparto de minutos: cuántos jugadores han jugado algo
     const rt = this.resumenTemporada(teamId);
-    const conMin = Object.values(rt.jugadores).filter(x=>x.minutos>0).length;
+    const conMin = Object.entries(rt.jugadores)
+      .filter(([pid,x])=>x.minutos>0 && ps.some(p=>p.id===pid)).length;
     return {
       partidos:ms.length, ganados:g, empatados:e, perdidos:ms.length-g-e,
       pf, pc, dif:pf-pc,
@@ -1712,11 +1737,26 @@ const Data = {
         st.pct===null?'':st.pct,
         ...prs.map(pr=>m[pr.id]?m[pr.id].valor:'')]);
     });
-    return filas.map(f=>f.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\n');
+    // Excel, LibreOffice y Google Sheets evalúan una celda entrecomillada que
+    // empieza por = + - o @, así que hay que neutralizar el carácter antes de
+    // entrecomillar (un jugador llamado "=CMD(...)" sería una fórmula).
+    const celda = v=>{
+      let s = String(v ?? '');
+      if(/^[=+\-@\t\r]/.test(s)) s = "'"+s;
+      return '"'+s.replace(/"/g,'""')+'"';
+    };
+    return filas.map(f=>f.map(celda).join(';')).join('\n');
   },
   exportarJSON(){
+    // Los hashes de contraseña NO viajan en la copia: son djb2 de 32 bits sin
+    // sal, así que permitirían recuperar las contraseñas locales en bruto. El
+    // resto de la copia es completa. Al restaurar una copia local habrá que
+    // volver a fijar contraseña (en nube las credenciales viven en Supabase).
+    const datos = { ...DB.load() };
+    if(Array.isArray(datos.users))
+      datos.users = datos.users.map(u=>{ const {hash, ...resto}=u; return resto; });
     return JSON.stringify({ exportado:new Date().toISOString(),
-      version:1, datos:DB.load() }, null, 2);
+      version:1, datos }, null, 2);
   },
   importarJSON(txt){
     if(!this.is('junta')) throw new Error('Solo la junta puede restaurar una copia');
@@ -1741,8 +1781,19 @@ const Data = {
     if(!this.is('junta')) throw new Error('Solo la junta puede cerrar la temporada');
     const d = DB.load();
     if(!d.historico) d.historico = [];
+    // Antes de limpiar se archiva el detalle real de la temporada. Sin esto, al
+    // abrir la nueva temporada los minutos, los puntos y los recibos desaparecen
+    // y el cierre es una pérdida de datos irreversible en vez de un archivado.
+    const porJugador = {};
+    this.teams().forEach(t=>{
+      const rt = this.resumenTemporada(t.id);
+      Object.keys(rt.jugadores||{}).forEach(pid=>{
+        porJugador[pid] = Object.assign({ equipo:t.id }, rt.jugadores[pid]);
+      });
+    });
     d.historico.push({ temporada:d.season.nombre, cerrada:today(),
-      jugadores:d.players.length, partidos:(d.matches||[]).length });
+      jugadores:d.players.length, partidos:(d.matches||[]).length,
+      porJugador, facturas:(d.invoices||[]).map(i=>Object.assign({},i)) });
     d.season = { id:uid('sea'), nombre:nombreNueva, activa:true };
     let subidos=0, bajas=0;
     movimientos.forEach(m=>{
@@ -1761,8 +1812,12 @@ const Data = {
   },
 
   log(accion, meta){
-    DB.load().audit.push({ id:uid('a'), user:this.ses?.userId, accion, meta,
+    const d = DB.load();
+    d.audit.push({ id:uid('a'), user:this.ses?.userId, accion, meta,
       at:new Date().toISOString() });
+    // Sin guardar, la entrada solo sobrevivía si un guardado posterior la
+    // arrastraba de rebote: cerrar la pestaña tras fundar el club la perdía.
+    DB.save();
   },
 
   /* ---------- progreso de puesta en marcha (checklist de la junta) ---------- */

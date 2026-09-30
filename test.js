@@ -186,9 +186,11 @@ ok(Data.signatures(h1.id).length===1, 'no se duplica una firma');
 // mandato SEPA
 try{ Data.signMandate(Data.myGuardian().id,'1234','Marta');
   ok(false,'debe validar el IBAN'); }catch(e){ ok(true); }
-Data.signMandate(Data.myGuardian().id,'ES2121001234560123456789','Marta Soler Vidal');
+try{ Data.signMandate(Data.myGuardian().id,'ES0000000000000000000000','Marta');
+  ok(false,'debe rechazar un IBAN con digito de control invalido'); }catch(e){ ok(true); }
+Data.signMandate(Data.myGuardian().id,'ES9121000418450200051332','Marta Soler Vidal');
 ok(Data.mandate(Data.myGuardian().id).firmado, 'el mandato queda firmado');
-ok(!Data.mandate(Data.myGuardian().id).iban.includes('0123456789'),
+ok(!Data.mandate(Data.myGuardian().id).iban.includes('450200051332'),
   'el IBAN se guarda enmascarado');
 
 /* ═══════════════ 6. CICLO COMPLETO DE CONVOCATORIA ═══════════════ */
@@ -477,6 +479,23 @@ Data.deleteEvent(ev2.id);
 ok(!d.rsvp.some(r=>r.event_id===ev2.id), 'borrar evento limpia sus RSVP');
 ok(!d.callups.some(c=>c.event_id===ev2.id), 'y sus convocatorias');
 ok(!d.attendance.some(a=>a.event_id===ev2.id), 'y su asistencia');
+
+// El partido tampoco puede sobrevivir al evento que lo originó: si no, sus
+// puntos y ensayos seguían sumando para siempre en las estadísticas del equipo.
+const evC2 = Data.createEvent({ team_id:equipoS16.id, tipo:'partido',
+  inicio:new Date(Date.now()+864e5).toISOString(), titulo:'Partido para borrar' });
+const mC2 = Data.ensureMatch(evC2.id);
+mC2.estado='final'; mC2.puntos_favor=30;
+mC2.acciones=[{ tipo:'punto', clase:'ensayo', valor:5, player:d.players[0].id, minuto:10 }];
+Data.saveMatch();
+ok(!!Data.match(evC2.id), 'el partido del evento existe antes de borrarlo');
+const pfConPartido = Data.statsEquipo(equipoS16.id).pf;
+Data.deleteEvent(evC2.id);
+ok(!Data.match(evC2.id), 'borrar el evento borra también su partido');
+ok(!(DB.load().matches||[]).some(m=>m.event_id===evC2.id),
+  'no queda ningún partido huérfano apuntando a un evento inexistente');
+ok(Data.statsEquipo(equipoS16.id).pf===pfConPartido-30,
+  'los puntos del partido borrado dejan de contar');
 
 /* ═══════════════ 15. HUECOS CORREGIDOS ═══════════════ */
 S_('15. Huecos funcionales corregidos');
@@ -939,6 +958,7 @@ ok(prev.some(x=>x.a), 'propone subida de categoría');
 const nPlayersAntes = Data.players().length;
 const movs = prev.map(x=>({ player_id:x.player.id,
   accion: x.a?'sube':'queda', team_id:x.a?x.a.id:null }));
+const nInvAntes = Data.invoices().length;
 const res = Data.cerrarTemporada('2027-28', movs);
 ok(Data.season().nombre==='2027-28', 'la temporada cambia');
 ok(Data.players().length===nPlayersAntes, 'las fichas se conservan');
@@ -946,6 +966,14 @@ ok(Data.events().length===0, 'los eventos se vacían');
 ok(Data.invoices().length===0, 'los recibos se vacían');
 ok((DB.load().matches||[]).length===0, 'los partidos se archivan');
 ok(DB.load().historico.length===1, 'queda registro histórico');
+// Cerrar la temporada es un archivado, no una pérdida de datos: el detalle por
+// jugador y los recibos tienen que sobrevivir aunque se vacíen las tablas.
+const hist = DB.load().historico[0];
+ok(hist.porJugador && Object.keys(hist.porJugador).length>0,
+  'el histórico guarda el detalle por jugador, no solo cuatro números');
+ok(Array.isArray(hist.facturas), 'el histórico guarda la lista de recibos');
+ok(Array.isArray(hist.facturas) && hist.facturas.length===nInvAntes,
+  'los recibos archivados son los que había ('+nInvAntes+')');
 ok(res.subidos>0, 'se promocionaron '+res.subidos+' jugadores');
 
 /* ═══════════════ 18. FLUJO COMPLETO DE UN PARTIDO ═══════════════ */
@@ -1123,6 +1151,91 @@ ok(Data.match(P.id).puntos_favor===12, 'volver a añadirlo restaura el marcador'
 const minTras = Data.minutosJugados(P.id);
 ok(minTras.find(x=>x.player_id===salePilar).minutos===25,
   'los minutos siguen siendo correctos tras editar');
+
+/* ═══════════════ 19. REGRESIÓN DE LA AUDITORÍA ═══════════════ */
+S_('19. Regresión de la auditoría');
+Data.endSession(); Data.login('junta@rcc.cat','nuevaclave1');
+S={};
+
+// --- B4: el registro de auditoría debe persistir de verdad ---
+// Hay que leer el almacenamiento real: DB.load() devuelve la caché en memoria,
+// en la que el push ya se ve aunque no se haya guardado nada en disco.
+const auditAntes = DB.load().audit.length;
+const cat19 = Data.addCategory({ nombre:'Regresión 19', edad:9, cuota:20 });
+Data.log('prueba.auditoria', { ok:true });
+ok(DB.load().audit.length===auditAntes+1, 'log() anade la entrada');
+const enDisco19 = JSON.parse(localStorage.getItem(DB_KEY)).audit;
+ok(enDisco19.length===auditAntes+1,
+  'log() guarda la entrada en disco, no solo en la caché en memoria');
+ok(enDisco19.slice(-1)[0].accion==='prueba.auditoria', 'la entrada persistida es la correcta');
+
+// --- M9: el CSV no debe poder ejecutar fórmulas en Excel ---
+// El nombre lo escribe un usuario cualquiera (alta de jugador), así que basta
+// con alterar el de uno existente para comprobar el escapado de la celda.
+const victima19 = Data.players()[0];
+const nombreOrig19 = victima19.nombre;
+Data.updatePlayer(victima19.id, { nombre:'=CMD("calc")' });
+const csv19 = Data.exportarCSV();
+Data.updatePlayer(victima19.id, { nombre:nombreOrig19 });
+ok(csv19.indexOf('"\'=CMD(""calc"")"')>=0,
+  'una celda que empieza por = queda neutralizada antes de entrecomillar');
+ok(!/^=CMD/m.test(csv19) && !/;"=CMD/.test(csv19),
+  'ninguna celda del CSV empieza por = sin neutralizar');
+
+// --- C6: la copia de seguridad no debe incluir hashes de contraseña ---
+const conHash = DB.load().users.filter(u=>u.hash).length;
+ok(conHash>0, 'hay usuarios con hash local ('+conHash+')');
+const json19 = Data.exportarJSON();
+ok(!/"hash"/.test(json19), 'exportarJSON no incluye ningún hash de contraseña');
+const datos19 = JSON.parse(json19).datos;
+ok(datos19.users.length===DB.load().users.length, 'pero sí conserva todos los usuarios');
+ok(datos19.players.length===DB.load().players.length, 'y el resto de datos del club');
+ok(datos19.club && datos19.club.nombre, 'incluido el club');
+
+// --- M4: al finalizar, mandan los minutos reales del reloj ---
+// Se usa un partido nuevo: la duración de la categoría (35x2=70) es solo el
+// valor previsto, y el reloj es lo que el entrenador dejó realmente.
+const evM4 = Data.createEvent({ team_id:eqF.id, tipo:'partido',
+  inicio:new Date(Date.now()+864e5).toISOString(), titulo:'Minutos reales' });
+const m4b = Data.ensureMatch(evM4.id);
+const dos19 = Data.teamPlayers(eqF.id).slice(0,2).map(p=>p.id);
+ok(dos19.length===2, 'hay dos titulares disponibles para la prueba de minutos');
+m4b.titulares = { a:dos19[0], b:dos19[1] };
+m4b.minuto = 40;
+m4b.estado = 'final';
+Data.saveMatch();
+ok(m4b.duracion_parte*2!==40, 'la duración teórica no coincide con el reloj parado');
+const min4b = Data.minutosJugados(evM4.id);
+const titular4b = min4b.find(x=>x.player_id===dos19[0]);
+ok(titular4b && titular4b.minutos===40,
+  'el titular sin cambios suma los 40 minutos reales ('+(titular4b?titular4b.minutos:'?')+')');
+ok(min4b.every(x=>x.minutos<=40), 'nadie supera el minuto real de fin');
+
+// --- C3: dar de baja no puede dejar el reparto por encima del 100% ---
+// Se da de baja a todos los que jugaron menos uno: así la plantilla queda
+// menor que el número de jugadores con minutos, que es justo cuando el reparto
+// se disparaba por encima del 100%.
+Data.endSession(); Data.login('coach@rcc.cat','clave1234');
+Data.setSession({ ...Data.ses, rol:'entrenador' });
+S={ teamId:eqF.id, eventId:P.id };
+const stAntesBaja = Data.statsEquipo(eqF.id);
+ok(stAntesBaja.hanJugado>0, 'hay minutos repartidos antes de la baja');
+const rt19 = Data.resumenTemporada(eqF.id);
+const juegaron19 = Object.keys(rt19.jugadores).filter(p=>rt19.jugadores[p].minutos>0);
+ok(juegaron19.length>=2, 'hay al menos dos jugadores con minutos');
+const bajas19 = juegaron19.slice(0,-1);
+ok(bajas19.length>=1, 'se da de baja al menos a uno de los que jugaron');
+const accionesAntes19 = Data.match(P.id).acciones.length;
+bajas19.forEach(pid=>Data.removePlayer(pid));
+const stDespuesBaja = Data.statsEquipo(eqF.id);
+ok(stDespuesBaja.hanJugado===1,
+  'solo cuenta el jugador que sigue en plantilla ('+stDespuesBaja.hanJugado+')');
+ok(stDespuesBaja.hanJugado<=stDespuesBaja.plantilla,
+  'hanJugado nunca supera la plantilla ('+stDespuesBaja.hanJugado+'/'+stDespuesBaja.plantilla+')');
+ok(stDespuesBaja.reparto<=100, 'el reparto se queda en 100% o menos ('+stDespuesBaja.reparto+'%)');
+// El partido ya finalizado es historial deportivo: su acta no se toca.
+ok(Data.match(P.id).acciones.length===accionesAntes19,
+  'el acta del partido finalizado se conserva intacta');
 
 /* ═══════════════ RESULTADO ═══════════════ */
 console.log('\n' + '─'.repeat(52));

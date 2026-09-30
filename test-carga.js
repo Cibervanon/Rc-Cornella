@@ -67,12 +67,23 @@ try {
       { cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
 } catch (e) { /* sin git no se puede comparar */ }
 
+/* Solo hay que subir la caché si sw.js ha cambiado respecto a lo confirmado.
+   Comparar siempre contra HEAD hacía fallar el árbol limpio, donde la versión
+   actual y la confirmada son la misma por definición. */
+let swCambiado = false;
+try {
+  swCambiado = require('child_process')
+    .execFileSync('git', ['diff', 'HEAD', '--', 'sw.js'],
+      { cwd: __dirname, encoding: 'utf8' }).trim() !== '';
+} catch (e) { swCambiado = !Number.isFinite(cacheConfirmada); }
+
 if (!Number.isFinite(cacheActual))
   { console.log('  XX  sw.js no declara la versión de caché'); fail++; }
-else if (Number.isFinite(cacheConfirmada) && cacheActual <= cacheConfirmada)
-  { console.log(`  XX  la versión de caché no se ha subido (v${cacheConfirmada} -> v${cacheActual})`); fail++; }
+else if (swCambiado && cacheActual <= cacheConfirmada)
+  { console.log(`  XX  sw.js cambió sin subir la caché (v${cacheConfirmada} -> v${cacheActual})`); fail++; }
 else
-  { console.log(`  ·  caché rccornella-v${cacheActual}`); }
+  { console.log(`  ·  caché rccornella-v${cacheActual}` +
+      (swCambiado ? '' : ' (sin cambios respecto a HEAD)')); }
 
 /* Si hay service worker, tiene que tener los dos handlers de push. Un aviso que
    llega pero no se pinta es el fallo más difícil de detectar en un móvil. */
