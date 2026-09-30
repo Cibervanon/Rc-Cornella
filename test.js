@@ -140,9 +140,6 @@ view('entrenador/equipo vacío', ()=>Coach.equipo());
 // un entrenador NO puede crear códigos
 try{ Data.createInvite({ rol:'entrenador' });
   ok(false,'el entrenador no debe poder generar códigos'); }catch(e){ ok(true); }
-// ni emitir cuotas
-try{ Data.issueInvoices('octubre 2026');
-  ok(false,'el entrenador no debe poder emitir cuotas'); }catch(e){ ok(true); }
 
 /* ═══════════════ 5. FAMILIA ═══════════════ */
 S_('5. Alta de familia e inscripción');
@@ -161,13 +158,12 @@ allViews(Family,'familia');
 const h1 = Data.addPlayer({ nombre:'Nil Soler Vidal', fecha_nac:'2011-04-12',
   team_id:equipoS16.id, talla:'M', posicion:'Centro' });
 ok(Data.myPlayers().length===1, 'el primer hijo queda inscrito');
-ok(Data.enrollment(h1.id).descuento===0, 'el primer hijo no lleva descuento');
+ok(Data.enrollment(h1.id).team_id===equipoS16.id, 'la inscripción apunta a su equipo');
 
 const equipoS12 = Data.teams().find(t=>t.nombre==='Sub-12');
 const h2 = Data.addPlayer({ nombre:'Ona Soler Vidal', fecha_nac:'2015-08-03',
   team_id:equipoS12.id, talla:'10' });
 ok(Data.myPlayers().length===2, 'segundo hijo inscrito');
-ok(Data.enrollment(h2.id).descuento===0.15, 'el segundo hermano lleva 15% de descuento');
 ok(Data.siblings(h1.id).length===1, 'se detectan los hermanos');
 
 try{ Data.addPlayer({ nombre:'', team_id:equipoS16.id });
@@ -182,16 +178,6 @@ Data.sign(h1.id, Data.docs()[0].id);
 ok(Data.pendingDocs(h1.id).length===2, 'firmar reduce los pendientes');
 Data.sign(h1.id, Data.docs()[0].id);
 ok(Data.signatures(h1.id).length===1, 'no se duplica una firma');
-
-// mandato SEPA
-try{ Data.signMandate(Data.myGuardian().id,'1234','Marta');
-  ok(false,'debe validar el IBAN'); }catch(e){ ok(true); }
-try{ Data.signMandate(Data.myGuardian().id,'ES0000000000000000000000','Marta');
-  ok(false,'debe rechazar un IBAN con digito de control invalido'); }catch(e){ ok(true); }
-Data.signMandate(Data.myGuardian().id,'ES9121000418450200051332','Marta Soler Vidal');
-ok(Data.mandate(Data.myGuardian().id).firmado, 'el mandato queda firmado');
-ok(!Data.mandate(Data.myGuardian().id).iban.includes('450200051332'),
-  'el IBAN se guarda enmascarado');
 
 /* ═══════════════ 6. CICLO COMPLETO DE CONVOCATORIA ═══════════════ */
 S_('6. Ciclo de convocatoria y asistencia');
@@ -278,7 +264,6 @@ ok(Data.myPlayers().length===2, 'y solo a los suyos');
 // la familia no puede emitir cuotas ni códigos
 try{ Data.createInvite({rol:'junta'}); ok(false,'familia no crea códigos'); }
 catch(e){ ok(true); }
-try{ Data.issueInvoices('x'); ok(false,'familia no emite cuotas'); }catch(e){ ok(true); }
 
 /* ═══════════════ 8. JUGADOR CON CUENTA PROPIA ═══════════════ */
 S_('8. Jugador con cuenta propia');
@@ -296,25 +281,21 @@ ok(Data.myPlayers()[0].id===h1.id, 'y es su propia ficha');
 S={}; allViews(Family,'jugador');
 ok(Family.esJugador(), 'se detecta el perfil de jugador');
 
-/* ═══════════════ 9. TESORERÍA ═══════════════ */
-S_('9. Cuotas y estados SEPA');
+/* ═══════════════ 9. CATEGORÍAS ═══════════════ */
+S_('9. Categorías sin cuotas');
 Data.endSession(); Data.login('junta@rcc.cat','clave1234');
 S={};
-const emitidos = Data.issueInvoices('octubre 2026');
-ok(emitidos===2, 'se emite un recibo por deportista (emitidos: '+emitidos+')');
-const facturas = Data.invoices();
-const fNil = facturas.find(i=>i.player_id===h1.id);
-const fOna = facturas.find(i=>i.player_id===h2.id);
-ok(fNil.estado==='en_proceso', 'con mandato firmado el recibo entra en proceso');
-ok(Number(fOna.descuento)>0, 'el segundo hermano lleva descuento en el recibo');
-ok(Math.abs(fOna.importe-(fOna.base*0.85))<0.02, 'el descuento es del 15%');
-const repetidos = Data.issueInvoices('octubre 2026');
-ok(repetidos===0, 'no se duplican recibos del mismo periodo');
-ok(Object.keys(PAY_T).includes(fNil.estado), 'todo estado tiene etiqueta');
-Data.updateInvoice(fNil.id,{ estado:'devuelto', motivo_devolucion:'Saldo insuficiente' });
-ok(Data.invoices({estados:['devuelto']}).length===1, 'se filtra por estado');
-S.iF='problemas'; view('junta/cuotas', ()=>Board.cuotas());
-Data.updateInvoice(fNil.id,{ estado:'en_proceso', motivo_devolucion:null });
+ok(Data.categories().length>=2, 'hay categorías del club fundado');
+ok(Data.categories().every(c=>!('cuota' in c)),
+  'ninguna categoría lleva cuota: los pagos van fuera de la aplicación');
+const catNueva9 = Data.addCategory('Sub-20');
+ok(catNueva9 && catNueva9.nombre==='Sub-20', 'addCategory acepta solo el nombre');
+ok(Data.teams().some(t=>t.cat_id===catNueva9.id), 'y crea su grupo por defecto');
+Data.updateCategory(catNueva9.id, { nombre:'Sub-20 renombrada' });
+ok(Data.categories().find(c=>c.id===catNueva9.id).nombre==='Sub-20 renombrada',
+  'updateCategory permite renombrar');
+Data.removeCategory ? Data.removeCategory(catNueva9.id) : null;
+S.iF=null;
 
 /* ═══════════════ 10. LOPIVI Y ASIGNACIONES ═══════════════ */
 S_('10. LOPIVI y gestión de personas');
@@ -462,8 +443,6 @@ const d = DB.load();
 ok(d.rsvp.every(r=>d.events.some(e=>e.id===r.event_id)), 'RSVP apunta a eventos reales');
 ok(d.enrollments.every(e=>d.players.some(p=>p.id===e.player_id)),
   'inscripciones apuntan a jugadores reales');
-ok(d.invoices.every(i=>d.players.some(p=>p.id===i.player_id)),
-  'recibos apuntan a jugadores reales');
 ok(d.links.every(l=>d.guardians.some(g=>g.id===l.guardian_id)),
   'vínculos apuntan a tutores reales');
 ok(d.staff.every(s=>d.teams.some(t=>t.id===s.team_id)),
@@ -510,10 +489,9 @@ ok(Data.player(pTest.id).dorsal===10, 'se guarda el dorsal');
 
 // cambiar de categoría
 const destino = Data.teams().find(t=>t.nombre==='Sub-18');
-const cuotaAntes = Data.enrollment(pTest.id).cuota;
 Data.movePlayer(pTest.id, destino.id);
 ok(Data.playerTeam(pTest.id).id===destino.id, 'se puede cambiar de categoría');
-ok(Data.enrollment(pTest.id).cuota===destino.cat.cuota, 'la cuota se actualiza');
+ok(Data.enrollment(pTest.id).team_id===destino.id, 'la inscripción apunta al nuevo equipo');
 Data.movePlayer(pTest.id, equipoS16.id);
 
 // editar y reprogramar evento
@@ -958,22 +936,17 @@ ok(prev.some(x=>x.a), 'propone subida de categoría');
 const nPlayersAntes = Data.players().length;
 const movs = prev.map(x=>({ player_id:x.player.id,
   accion: x.a?'sube':'queda', team_id:x.a?x.a.id:null }));
-const nInvAntes = Data.invoices().length;
 const res = Data.cerrarTemporada('2027-28', movs);
 ok(Data.season().nombre==='2027-28', 'la temporada cambia');
 ok(Data.players().length===nPlayersAntes, 'las fichas se conservan');
 ok(Data.events().length===0, 'los eventos se vacían');
-ok(Data.invoices().length===0, 'los recibos se vacían');
 ok((DB.load().matches||[]).length===0, 'los partidos se archivan');
 ok(DB.load().historico.length===1, 'queda registro histórico');
 // Cerrar la temporada es un archivado, no una pérdida de datos: el detalle por
-// jugador y los recibos tienen que sobrevivir aunque se vacíen las tablas.
+// jugador tiene que sobrevivir aunque se vacíen las tablas.
 const hist = DB.load().historico[0];
 ok(hist.porJugador && Object.keys(hist.porJugador).length>0,
   'el histórico guarda el detalle por jugador, no solo cuatro números');
-ok(Array.isArray(hist.facturas), 'el histórico guarda la lista de recibos');
-ok(Array.isArray(hist.facturas) && hist.facturas.length===nInvAntes,
-  'los recibos archivados son los que había ('+nInvAntes+')');
 ok(res.subidos>0, 'se promocionaron '+res.subidos+' jugadores');
 
 /* ═══════════════ 18. FLUJO COMPLETO DE UN PARTIDO ═══════════════ */
@@ -982,7 +955,7 @@ Data.endSession(); Data.login('coach@rcc.cat','clave1234');
 Data.setSession({ ...Data.ses, rol:'entrenador' });
 // categoría nueva y limpia, para que el flujo no arrastre nada anterior
 Data.endSession(); Data.login('junta@rcc.cat','nuevaclave1');
-const catF = Data.addCategory('Sub-18 Test', 45);
+const catF = Data.addCategory('Sub-18 Test');
 const eqF = Data.teams().find(t=>t.cat_id===catF.id);
 Data.endSession(); Data.login('coach@rcc.cat','clave1234');
 Data.setSession({ ...Data.ses, rol:'entrenador' });
@@ -1161,7 +1134,7 @@ S={};
 // Hay que leer el almacenamiento real: DB.load() devuelve la caché en memoria,
 // en la que el push ya se ve aunque no se haya guardado nada en disco.
 const auditAntes = DB.load().audit.length;
-const cat19 = Data.addCategory({ nombre:'Regresión 19', edad:9, cuota:20 });
+const cat19 = Data.addCategory('Regresión 19');
 Data.log('prueba.auditoria', { ok:true });
 ok(DB.load().audit.length===auditAntes+1, 'log() anade la entrada');
 const enDisco19 = JSON.parse(localStorage.getItem(DB_KEY)).audit;
@@ -1268,15 +1241,15 @@ FIELDS.pw20 = '     ';
 ok(valp('pw20')==='     ', 'una contraseña de solo espacios no se vacía con valp()');
 
 // --- El mapeo debe coincidir con las columnas reales de SQL ---
-// audit_log tiene user_id y season_history tiene por_jugador/facturas. Si el
+// audit_log tiene user_id y season_history tiene por_jugador. Si el
 // nombre no coincide, PostgREST rechaza el lote entero con PGRST204 y la
 // sincronización se queda "pendiente" para siempre.
 ok(Backend.mapa.audit.col && Backend.mapa.audit.col.user==='user_id',
   'audit: la app escribe "user" y la columna es "user_id"');
 ok(Backend.mapa.historico.col && Backend.mapa.historico.col.porJugador==='por_jugador',
   'historico: porJugador se renombra a la columna por_jugador de SQL');
-ok(!Object.values(Backend.mapa.historico.col).some(v=>v==='facturas'),
-  'facturas NO se renombra: un nombre igual en ambos lados lo borraría');
+ok(Backend.mapa.invoices===undefined && Backend.mapa.mandates===undefined,
+  'no hay mapeo de pagos: las tablas de recibos y mandatos se retiraron');
 
 const filaAudit20 = Backend.aFila('audit',
   { id:'a1', user:'u9', accion:'x', at:'2026-01-01' }, 'club1');
@@ -1287,15 +1260,13 @@ ok(Backend.desdeFila('audit', { id:'a1', user_id:'u9', accion:'x' }).user==='u9'
 
 const filaHist20 = Backend.aFila('historico',
   { temporada:'2025', cerrada:'2026', jugadores:10, partidos:8,
-    porJugador:{a:1}, facturas:[{id:'f1'}] }, 'club1');
+    porJugador:{a:1} }, 'club1');
 ok(filaHist20.por_jugador && filaHist20.porJugador===undefined,
   'aFila() renombra porJugador a por_jugador');
-ok(Array.isArray(filaHist20.facturas) && filaHist20.facturas.length===1,
-  'y manda las facturas archivadas a su columna');
 // Un archivo antiguo sin el detalle no debe inventar columnas vacías.
 const histVacio20 = Backend.aFila('historico',
   { temporada:'2024', cerrada:'2025', jugadores:1, partidos:1 }, 'club1');
-ok(!('por_jugador' in histVacio20) && !('facturas' in histVacio20),
+ok(!('por_jugador' in histVacio20),
   'un archivo sin detalle no envía columnas inventadas (PGRST204)');
 
 // --- Las tablas "públicas" también se filtran por club ---

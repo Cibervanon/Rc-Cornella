@@ -42,7 +42,7 @@ const EMPTY = () => ({
   drills: [], sessions: [], sessionDrills: [],
   evaluations: [], notes: [], injuries: [], goals: [],
   posts: [], reads: [], tasks: [], notifs: [],
-  invoices: [], mandates: [], docs: [], signatures: [], certs: [],
+  docs: [], signatures: [], certs: [],
   audit: []
 });
 
@@ -81,7 +81,7 @@ const DB = {
 /* ---------- catálogo de roles ---------- */
 const ROLES = {
   junta:      { t:'Junta directiva', ic:'shield',
-                d:'Gestiona el club, las cuotas y el cumplimiento' },
+                d:'Gestiona el club y el cumplimiento' },
   entrenador: { t:'Entrenador',      ic:'whistle',
                 d:'Convoca, pasa lista y sigue a sus jugadores' },
   familia:    { t:'Familia',         ic:'users',
@@ -92,9 +92,9 @@ const ROLES = {
 
 /* Categorías por defecto que propone el asistente de creación de club. */
 const CAT_PRESET = [
-  { n:'Sub-8',  cuota:30 }, { n:'Sub-10', cuota:32 }, { n:'Sub-12', cuota:35 },
-  { n:'Sub-14', cuota:38 }, { n:'Sub-16', cuota:42 }, { n:'Sub-18', cuota:45 },
-  { n:'Sénior', cuota:52 }
+  { n:'Sub-8' }, { n:'Sub-10' }, { n:'Sub-12' },
+  { n:'Sub-14' }, { n:'Sub-16' }, { n:'Sub-18' },
+  { n:'Sénior' }
 ];
 
 /* Biblioteca inicial de ejercicios de rugby (contenido del club, no "datos
@@ -324,7 +324,7 @@ const Data = {
     d.members.push({ club_id:d.club.id, user_id:u.id, rol:'junta' });
 
     (categorias && categorias.length ? categorias : CAT_PRESET).forEach((c,i)=>{
-      const cat = { id:uid('cat'), nombre:c.n, orden:i, cuota:c.cuota };
+      const cat = { id:uid('cat'), nombre:c.n, orden:i };
       d.categories.push(cat);
       d.teams.push({ id:uid('t'), cat_id:cat.id, nombre:c.n });
     });
@@ -558,9 +558,9 @@ const Data = {
   },
   team(id){ return this.teams().find(t=>t.id===id); },
 
-  addCategory(nombre, cuota){
+  addCategory(nombre){
     const d = DB.load();
-    const cat = { id:uid('cat'), nombre, orden:d.categories.length, cuota:+cuota||0 };
+    const cat = { id:uid('cat'), nombre, orden:d.categories.length };
     d.categories.push(cat);
     d.teams.push({ id:uid('t'), cat_id:cat.id, nombre, nivel:'' });
     DB.save(); return cat;
@@ -710,11 +710,8 @@ const Data = {
     d.players.push(p);
     d.links.push({ player_id:p.id, guardian_id:g.id, principal:true });
 
-    const t = this.team(team_id);
-    const yaTiene = d.links.filter(l=>l.guardian_id===g.id).length;
-    const desc = yaTiene > 1 ? 0.15 : 0;   // 15% a partir del segundo hermano
     d.enrollments.push({ id:uid('en'), player_id:p.id, team_id,
-      cuota: t?.cat?.cuota || 0, descuento:desc, alta:today(), baja:null });
+      alta:today(), baja:null });
 
     // RSVP para los eventos futuros que ya existan del equipo
     this.events(team_id).forEach(ev=>{
@@ -742,7 +739,6 @@ const Data = {
     d.injuries    = d.injuries.filter(i=>i.player_id!==pid);
     d.goals       = d.goals.filter(g=>g.player_id!==pid);
     d.signatures  = d.signatures.filter(s=>s.player_id!==pid);
-    d.invoices    = d.invoices.filter(i=>i.player_id!==pid);
     // Los partidos ya finalizados son historial deportivo y se conservan íntegros
     // (borrar sus acciones falsearía el marcador). En los que aún no han empezado
     // o están en curso sí se retira al jugador para no dejar alineaciones inválidas.
@@ -757,8 +753,7 @@ const Data = {
   },
   movePlayer(pid, teamId){
     const e = this.enrollment(pid);
-    const t = this.team(teamId);
-    if(e){ e.team_id = teamId; e.cuota = t?.cat?.cuota || e.cuota; }
+    if(e) e.team_id = teamId;
     DB.save();
   },
   /* ---------- etiquetas de posición ---------- */
@@ -1523,81 +1518,6 @@ const Data = {
   unread(){ return this.notifs().filter(n=>!n.leido).length; },
   readAll(){ this.notifs().forEach(n=>n.leido=true); DB.save(); },
 
-  /* ============================================================
-     ECONÓMICO
-     ============================================================ */
-  invoices(filter={}){
-    let l = DB.load().invoices;
-    if(filter.playerIds) l = l.filter(i=>filter.playerIds.includes(i.player_id));
-    if(filter.estados)   l = l.filter(i=>filter.estados.includes(i.estado));
-    return l;
-  },
-  /** Emite las cuotas del mes para todos los inscritos. Solo junta. */
-  issueInvoices(periodo){
-    if(!this.is('junta')) throw new Error('Solo la tesorería puede emitir cuotas');
-    const d = DB.load();
-    let n = 0;
-    const nuevas = [];
-    d.enrollments.filter(e=>!e.baja).forEach(e=>{
-      if(d.invoices.some(i=>i.player_id===e.player_id && i.periodo===periodo)) return;
-      const g = this.guardiansOf(e.player_id)[0];
-      const mand = g ? d.mandates.find(m=>m.guardian_id===g.id && m.firmado) : null;
-      const desc = +(e.cuota*e.descuento).toFixed(2);
-      const iv = { id:uid('iv'), player_id:e.player_id,
-        guardian_id:g?g.id:null, periodo,
-        concepto:'Cuota '+periodo, base:e.cuota, descuento:desc,
-        importe:+(e.cuota-desc).toFixed(2),
-        estado: mand ? 'en_proceso' : 'sin_mandato',
-        emitido:today(), metodo:'SEPA', avisos:0 };
-      d.invoices.push(iv);
-      nuevas.push(iv);
-      n++;
-    });
-    DB.save();
-
-    // Aviso al tutor de cada recibo. Solo si ha firmado el mandato: si no lo ha
-    // firmado todavía no hay nada que cobrar y el correo solo le frightens.
-    nuevas.filter(iv => iv.estado === 'en_proceso').forEach(iv=>{
-      const p = this.player(iv.player_id);
-      this.correosDe(iv.player_id).forEach(c=>this.correo('cuota', {
-        destinatarioEmail:c.email, destinatario:c.nombre || c.email,
-        club:this.clubNombre(), periodo:iv.periodo, concepto:iv.concepto,
-        importe:iv.importe.toFixed(2),
-        nombres:p ? p.nombre.split(' ')[0] : '', enlace:this.appUrl()
-      }));
-    });
-
-    return n;
-  },
-  updateInvoice(id, patch){
-    const i = DB.load().invoices.find(x=>x.id===id);
-    if(i) Object.assign(i, patch); DB.save();
-  },
-  mandate(gid){ return DB.load().mandates.find(m=>m.guardian_id===gid); },
-  signMandate(gid, iban, titular){
-    const d = DB.load();
-    const clean = (iban||'').replace(/\s/g,'').toUpperCase();
-    const mal = 'El IBAN no es válido. Debe empezar por ES, tener 24 caracteres y ser un IBAN real.';
-    if(!/^ES\d{22}$/.test(clean)) throw new Error(mal);
-    // Comprobación mod-97 (ISO 13616). Antes solo se miraba el prefijo, así que
-    // se aceptaban y guardaban IBAN inexistentes. El resto se sigue guardando
-    // enmascarado por privacidad; esto solo evita guardar basura.
-    const num = (clean.slice(4) + clean.slice(0,4)).replace(/[A-Z]/g, c=>String(c.charCodeAt(0)-55));
-    let resto = 0;
-    for(const dig of num) resto = (resto*10 + Number(dig)) % 97;
-    if(resto !== 1) throw new Error(mal);
-    let m = d.mandates.find(x=>x.guardian_id===gid);
-    const masked = clean.slice(0,6)+' •••• •••• '+clean.slice(-4);
-    if(!m){ m = { id:uid('md'), guardian_id:gid }; d.mandates.push(m); }
-    Object.assign(m, { iban:masked, titular, firmado:true, at:new Date().toISOString() });
-    // los recibos sin mandato pasan a proceso
-    this.myPlayers().forEach(p=>{
-      d.invoices.filter(i=>i.player_id===p.id && i.estado==='sin_mandato')
-        .forEach(i=>i.estado='en_proceso');
-    });
-    DB.save(); return m;
-  },
-
   /* ---------- documentos y cumplimiento ---------- */
   docs(){ return DB.load().docs; },
   signatures(pid){ return DB.load().signatures.filter(s=>s.player_id===pid); },
@@ -1721,10 +1641,10 @@ const Data = {
     const prs = this.pruebas();
     const filas = [['Nombre','Fecha nacimiento','Categoria','Grupo','Dorsal',
       'Puestos','Talla','Peso','Altura','Alergias','Tutor','Email','Telefono',
-      'Cuota','Descuento','Asistencia %',
+      'Asistencia %',
       ...prs.map(pr=>pr.t+' ('+pr.u+')')]];
     this.players().forEach(p=>{
-      const t = this.playerTeam(p.id), e = this.enrollment(p.id);
+      const t = this.playerTeam(p.id);
       const g = this.guardiansOf(p.id)[0] || {};
       const st = this.attStats(p.id);
       const m = p.marcas || {};
@@ -1733,7 +1653,6 @@ const Data = {
         this.posicionesDe(p.id).map(id=>POS(id)?.t).filter(Boolean).join(' / '),
         p.talla||'', p.peso||'', p.altura||'', p.alergias||'',
         g.nombre||'', g.email||'', g.tel||'',
-        e?e.cuota:'', e?Math.round(e.descuento*100)+'%':'',
         st.pct===null?'':st.pct,
         ...prs.map(pr=>m[pr.id]?m[pr.id].valor:'')]);
     });
@@ -1782,7 +1701,7 @@ const Data = {
     const d = DB.load();
     if(!d.historico) d.historico = [];
     // Antes de limpiar se archiva el detalle real de la temporada. Sin esto, al
-    // abrir la nueva temporada los minutos, los puntos y los recibos desaparecen
+    // abrir la nueva temporada los minutos y los puntos desaparecen
     // y el cierre es una pérdida de datos irreversible en vez de un archivado.
     const porJugador = {};
     this.teams().forEach(t=>{
@@ -1793,20 +1712,19 @@ const Data = {
     });
     d.historico.push({ temporada:d.season.nombre, cerrada:today(),
       jugadores:d.players.length, partidos:(d.matches||[]).length,
-      porJugador, facturas:(d.invoices||[]).map(i=>Object.assign({},i)) });
+      porJugador });
     d.season = { id:uid('sea'), nombre:nombreNueva, activa:true };
     let subidos=0, bajas=0;
     movimientos.forEach(m=>{
       if(m.accion==='baja'){ this.removePlayer(m.player_id); bajas++; }
       else if(m.accion==='sube' && m.team_id){
         const e = this.enrollment(m.player_id);
-        const t = this.team(m.team_id);
-        if(e){ e.team_id=m.team_id; e.cuota=t?.cat?.cuota||e.cuota; subidos++; }
+        if(e){ e.team_id=m.team_id; subidos++; }
       }
     });
-    // la nueva temporada arranca sin eventos ni recibos, pero conserva fichas
+    // la nueva temporada arranca sin eventos, pero conserva fichas
     d.events=[]; d.rsvp=[]; d.callups=[]; d.attendance=[]; d.matches=[];
-    d.invoices=[]; d.tasks=[];
+    d.tasks=[];
     DB.save();
     return { subidos, bajas };
   },

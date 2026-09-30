@@ -12,7 +12,7 @@
   "lang": "es",
   "dir": "ltr",
   "categories": ["sports", "productivity"],
-  "description": "Convocatorias, confirmaciones, alineaciones, actas de partido y cuotas del club.",
+  "description": "Convocatorias, confirmaciones, alineaciones y actas de partido del club.",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

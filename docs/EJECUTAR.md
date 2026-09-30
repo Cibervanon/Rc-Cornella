@@ -134,7 +134,7 @@ Para uso real compartido hace falta un servidor. Mientras tanto, la app es perfe
 
 - Que un entrenador lleve su equipo, sus alineaciones y sus actas de partido
 - Enseñarla a clubes para validar si el producto les interesa
-- Que la junta lleve el registro LOPIVI y las cuotas
+- Que la junta lleve el registro LOPIVI
 
 Si decides dar el paso al servidor, la capa de datos está centralizada en `js/store.js` dentro del objeto `Data`, y todas las vistas hablan solo con ella. Sustituir el almacenamiento local por llamadas a un servidor no obliga a tocar ninguna pantalla.
 

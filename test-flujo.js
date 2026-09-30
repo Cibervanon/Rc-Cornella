@@ -207,7 +207,7 @@ function comprobar(nombre, condicion, detalle = '') {
      4. Pantallas: se pintan todas sin reventar
      --------------------------------------------------------------------- */
   console.log('\n4. Todas las pantallas se pintan sin errores');
-  const rutas = ['hoy', 'agenda', 'jugadores', 'partidos', 'cuotas', 'avisos', 'perfil', 'admin'];
+  const rutas = ['hoy', 'agenda', 'jugadores', 'partidos', 'avisos', 'perfil', 'admin'];
   for (const r of rutas) {
     const antesErr = errores.length;
     let pintada = false, detalle = '';
@@ -243,9 +243,9 @@ function comprobar(nombre, condicion, detalle = '') {
       'attendance', 'drills', 'addDrill', 'addPrueba', 'evaluations',
       'saveEvaluation', 'addNote', 'notes', 'injuries', 'addInjury', 'closeInjury',
       'activeInjuries', 'callups', 'setCallups', 'rsvpOf', 'setRsvp', 'rsvpList',
-      'issueInvoices', 'invoices', 'certs', 'myCert', 'updateCert'],
+      'certs', 'myCert', 'updateCert'],
     '4. Familia': ['myPlayers', 'myGuardian', 'guardiansOf', 'hermanos',
-      'siblings', 'docs', 'pendingDocs', 'signMandate', 'signatures', 'mandate',
+      'siblings', 'docs', 'pendingDocs', 'signatures',
       'familyCode', 'regenerarCodigoFamilia'],
     '5. Jugador': ['player', 'marcas', 'setMarca', 'goals', 'toggleGoal',
       'historicoMarca', 'rankingMarca', 'posicionDe'],

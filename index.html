@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#121212">
 <title>Rugby Club Cornellà</title>
-<meta name="description" content="Gestión del club: convocatorias, confirmaciones, plantilla y cuotas.">
+<meta name="description" content="Gestión del club: convocatorias, confirmaciones, plantilla y documentación.">
 <link rel="stylesheet" href="styles.css">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
@@ -74,7 +74,7 @@ if ('serviceWorker' in navigator) {
     const d = e.data.url || '/';
     const m = d.match(/evento\/([\w-]+)/);
     if (m) { Shell.go('evento', { eventId: m[1] }); return; }
-    if (/\/?(cuotas|avisos|agenda)/.test(d)) { Shell.goTab('home'); return; }
+    if (/\/?(avisos|agenda)/.test(d)) { Shell.goTab('home'); return; }
     Shell.render();
   });
 }

@@ -113,24 +113,6 @@ const PLANTILLAS = {
       <p><a href="${esc(d.enlace)}">Abrir la aplicación</a></p>`,
   }),
 
-  // Recibo emitido.
-  cuota: (d) => ({
-    asunto: `Cuota ${esc(d.periodo)}: ${d.club}`,
-    html: `
-      <p>Hola ${esc(d.destinatario)},</p>
-      <p>Se ha emitido el recibo de <strong>${esc(d.periodo)}</strong> para
-         ${esc(d.nombres)} en <strong>${esc(d.club)}</strong>.</p>
-      <table style="border-collapse:collapse;margin:16px 0;font-size:15px">
-        <tr><td style="padding:4px 16px 4px 0;color:#666">Concepto</td>
-            <td style="padding:4px 0">${esc(d.concepto)}</td></tr>
-        <tr><td style="padding:4px 16px 4px 0;color:#666">Importe</td>
-            <td style="padding:4px 0"><strong>${esc(d.importe)} €</strong></td></tr>
-      </table>
-      <p><a href="${esc(d.enlace)}">Ver mis recibos</a></p>
-      <p style="color:#777;font-size:13px">Se domicilia en el IBAN que
-         firmaste. Para cambiarlo, entra en la aplicación.</p>`,
-  }),
-
   // Nueva valoración compartida por el entrenador.
   valoracion: (d) => ({
     asunto: `Valoración de ${esc(d.nombre)}: ${esc(d.club)}`,

@@ -24,7 +24,7 @@ club de rugby. La quinta, Firebase, es opcional y está en la sección 9.
 | Qué | Para qué | Dónde se pide |
 |---|---|---|
 | Proyecto de Supabase | Base de datos, usuarios y reglas de acceso | [supabase.com](https://supabase.com) |
-| Dominio de Resend | Enviar correos (códigos, recordatorios, cuotas) | [resend.com](https://resend.com) |
+| Dominio de Resend | Enviar correos (códigos, recordatorios, avisos) | [resend.com](https://resend.com) |
 | Credencial de Google | Entrar con Gmail | [console.cloud.google.com](https://console.cloud.google.com) |
 | Sitio web publicado | Dirección pública de la app | Netlify, Vercel o GitHub Pages |
 

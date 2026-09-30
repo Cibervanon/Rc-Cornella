@@ -1251,14 +1251,14 @@ const Coach = {
     const p = Data.player(pid);
     const actual = Data.playerTeam(pid);
     sheet('Cambiar de categoría', `
-      ${hint('La cuota pasa a ser la de la nueva categoría. El historial de '+
-        'asistencia y valoraciones se conserva.')}
+${hint('El historial de '+
+       'asistencia y valoraciones se conserva.')}
       <div class="rows">${Data.teams().map(t=>`
         <button class="sel ${t.id===actual?.id?'on':''}"
           onclick="Coach.confirmarMover('${pid}','${t.id}')">
           <span class="box">${t.id===actual?.id?I.check(15):''}</span>
-          <div class="row-b"><b>${esc(t.nombre)}</b>
-            <span>${eur(t.cat?.cuota||0)} al mes · ${Data.teamPlayers(t.id).length} jugadores</span></div>
+<div class="row-b"><b>${esc(t.nombre)}</b>
+     <span>${Data.teamPlayers(t.id).length} jugadores</span></div>
         </button>`).join('')}</div>`);
   },
   confirmarMover(pid, tid){
@@ -1268,8 +1268,8 @@ const Coach = {
   bajaJugador(pid){
     const p = Data.player(pid);
     confirmSheet('Dar de baja a '+p.nombre.split(' ')[0],
-      'Se eliminarán su ficha, su asistencia, sus valoraciones y sus recibos '+
-      'pendientes. No se puede deshacer.', 'Dar de baja',
+'Se eliminarán su ficha, su asistencia y sus valoraciones. '+
+       'No se puede deshacer.', 'Dar de baja',
       ()=>{ Data.removePlayer(pid); Shell.back(); toast('Deportista dado de baja'); });
   },
 

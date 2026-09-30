@@ -37,10 +37,6 @@ function fechaCorta(iso, conHora=true){
   return conHora ? t+' · '+hhmm(iso) : t;
 }
 function diasA(iso){ return Math.round((new Date(iso)-new Date())/864e5); }
-function periodoActual(){
-  const d = new Date();
-  return MESL[d.getMonth()]+' '+d.getFullYear();
-}
 function edad(fn){
   if(!fn) return null;
   return Math.floor((Date.now()-new Date(fn))/(365.25*864e5));
@@ -83,15 +79,9 @@ const ATT_T = {
   presente:{ t:'Presente', c:'t-ok' }, tarde:{ t:'Tarde', c:'t-warn' },
   justificado:{ t:'Justificado', c:'t-info' }, ausente:{ t:'Ausente', c:'t-bad' }
 };
-const PAY_T = {
-  pagado:{ t:'Pagado', c:'t-ok' }, en_proceso:{ t:'En proceso', c:'t-info' },
-  pendiente:{ t:'Pendiente', c:'t-mute' }, devuelto:{ t:'Devuelto', c:'t-bad' },
-  cobro_manual:{ t:'Cobrado en mano', c:'t-ok' }, sin_mandato:{ t:'Sin domiciliar', c:'t-warn' }
-};
 const tag = (t,c) => `<span class="tag ${c}"><i></i>${esc(t)}</span>`;
 const tagRsvp = e => tag(RSVP_T[e].t, RSVP_T[e].c);
 const tagAtt  = e => tag(ATT_T[e].t, ATT_T[e].c);
-const tagPay  = e => tag(PAY_T[e].t, PAY_T[e].c);
 
 const EV_ICON = { entrenamiento:'dumbbell', partido:'ball', torneo:'trophy',
                   reunion:'users', otro:'pin' };

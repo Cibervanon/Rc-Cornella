@@ -9,7 +9,6 @@ const Board = {
   nav:[
     { k:'panel',  i:'chart',    t:'Panel' },
     { k:'gente',  i:'squad',    t:'Personas' },
-    { k:'cuotas', i:'euro',     t:'Cuotas' },
     { k:'lopivi', i:'shield',   t:'LOPIVI' },
     { k:'club',   i:'settings', t:'Club' }
   ],
@@ -20,7 +19,6 @@ const Board = {
     const hechos = pasos.filter(p=>p.done).length;
     const d = DB.load();
     const ps = Data.players();
-    const inv = Data.invoices();
     const cert = Data.certs();
     const sinCert = cert.filter(c=>c.estado!=='vigente').length;
     const sinEquipo = Data.coachesWithoutTeam();
@@ -38,7 +36,7 @@ const Board = {
           <span>${esc(p.t)}</span></div>`).join('')}
       </div>
       ${this.siguienteAccion(pasos)}
-      ${ps.length?this.resumen(ps,inv,cert):''}`;
+      ${ps.length?this.resumen(ps,cert):''}`;
     }
 
     return `
@@ -49,7 +47,7 @@ const Board = {
       'No pueden convocar hasta que les asignes una categoría.','warn'):''}
     ${sinCert ? hint('<strong>'+sinCert+' técnico'+(sinCert>1?'s':'')+
       ' sin certificado en regla.</strong> Es obligatorio por la LOPIVI.','bad'):''}
-    ${this.resumen(ps,inv,cert)}
+    ${this.resumen(ps,cert)}
 
     <div class="t-sec">Equipos</div>
     <div class="rows">${Data.teams().map(t=>{
@@ -97,18 +95,11 @@ const Board = {
     </div>`;
   },
 
-  resumen(ps,inv,cert){
-    const total = inv.reduce((a,b)=>a+Number(b.importe),0);
-    const cobr  = inv.filter(i=>['pagado','cobro_manual'].includes(i.estado))
-                     .reduce((a,b)=>a+Number(b.importe),0);
-    const dev = inv.filter(i=>i.estado==='devuelto').length;
+  resumen(ps,cert){
     const ok = cert.filter(c=>c.estado==='vigente').length;
     return `<div class="metrics">
       <div class="metric"><div class="mv">${ps.length}</div>
         <div class="ml">Deportistas</div></div>
-      <div class="metric ${dev?'warn':''}"><div class="mv">${
-        inv.length?Math.round(cobr/total*100)+'%':'—'}</div>
-        <div class="ml">Cuotas cobradas</div></div>
       <div class="metric ${cert.length&&ok<cert.length?'warn':''}">
         <div class="mv">${ok}/${cert.length||'—'}</div>
         <div class="ml">LOPIVI en regla</div></div>
@@ -375,103 +366,6 @@ const Board = {
     this.tecnico(uid2); Shell.render();
   },
 
-  /* ==================== CUOTAS ==================== */
-  cuotas(){
-    const inv = Data.invoices();
-    const per = periodoActual();
-    const ya = inv.some(i=>i.periodo===per);
-    const ps = Data.players();
-
-    if(!ps.length) return `
-      <h1 class="t-page">Cuotas</h1>
-      <p class="t-sub">Domiciliación sin comisiones</p>
-      ${blank(I.euro(24),'Todavía no hay deportistas',
-        'Cuando las familias inscriban a sus hijos podrás emitir las cuotas '+
-        'del mes de una sola vez.')}`;
-
-    if(!inv.length) return `
-      <h1 class="t-page">Cuotas</h1>
-      <p class="t-sub">${ps.length} deportistas inscritos</p>
-      ${blank(I.euro(24),'Aún no has emitido ninguna cuota',
-        'Se generará un recibo por deportista, con el descuento de hermanos ya '+
-        'aplicado. Las familias que no hayan domiciliado quedarán marcadas.',
-        `<button class="btn btn-accent" onclick="Board.emitir()">
-          Emitir las cuotas de ${esc(per)}</button>`)}`;
-
-    const f = S.iF || 'problemas';
-    let lista = inv;
-    if(f==='problemas') lista = inv.filter(i=>['devuelto','sin_mandato','pendiente'].includes(i.estado));
-    if(f==='proceso')   lista = inv.filter(i=>i.estado==='en_proceso');
-    if(f==='ok')        lista = inv.filter(i=>['pagado','cobro_manual'].includes(i.estado));
-    const prob = inv.filter(i=>['devuelto','sin_mandato','pendiente'].includes(i.estado));
-
-    return `
-    <h1 class="t-page">Cuotas</h1>
-    <p class="t-sub">Domiciliación SEPA · el club no paga comisión</p>
-    ${!ya ? `<button class="btn btn-accent" onclick="Board.emitir()">
-      Emitir las cuotas de ${esc(per)}</button><div style="height:12px"></div>`:''}
-    ${prob.length
-      ? hint('<strong>'+prob.length+' recibos sin cobrar ('+
-          eur(prob.reduce((a,b)=>a+Number(b.importe),0))+').</strong>','bad')
-      : hint('Todos los recibos están cobrados o en curso.','ok')}
-    <div class="tabs">
-      <button class="${f==='problemas'?'on':''}" onclick="S.iF='problemas';Shell.render()">Sin cobrar</button>
-      <button class="${f==='proceso'?'on':''}" onclick="S.iF='proceso';Shell.render()">En curso</button>
-      <button class="${f==='ok'?'on':''}" onclick="S.iF='ok';Shell.render()">Cobrados</button>
-    </div>
-    ${f==='proceso'?hint('Los cargos tardan unos <strong>6 días hábiles</strong> en '+
-      'confirmarse. Hasta entonces no se consideran cobrados.'):''}
-    ${lista.length ? `<div class="rows">${lista.map(i=>{
-      const p = Data.player(i.player_id);
-      return `<button class="row" onclick="Board.recibo('${i.id}')">
-        ${ava(p?p.nombre:'—')}
-        <div class="row-b"><b>${esc(p?p.nombre:'—')}</b>
-          <span>${esc(i.motivo_devolucion||i.concepto)}</span></div>
-        <div class="row-e"><span class="amt">${eur(i.importe)}</span>${tagPay(i.estado)}</div>
-      </button>`;
-    }).join('')}</div>` : blank(I.check(24),'Nada por aquí','No hay recibos en este estado.')}
-    ${hint('Un recibo cobrado puede devolverse hasta <strong>8 semanas</strong> después. '+
-      'El saldo del mes no es definitivo hasta entonces.','warn')}`;
-  },
-  emitir(){
-    confirmSheet('Emitir cuotas', 'Se generará un recibo por cada deportista '+
-      'inscrito para '+periodoActual()+'. Puedes anularlos después uno a uno.',
-      'Emitir', ()=>{
-        try{ const n = Data.issueInvoices(periodoActual());
-          toast(n+' recibos emitidos'); Shell.render(); }
-        catch(e){ toast(e.message); }
-      }, false);
-  },
-  recibo(id){
-    const i = Data.invoices().find(x=>x.id===id);
-    const p = Data.player(i.player_id);
-    sheet('Recibo de '+(p?p.nombre.split(' ')[0]:'—'), `
-      <div class="kv"><span>Concepto</span><span>${esc(i.concepto)}</span></div>
-      <div class="kv"><span>Cuota base</span><span>${eur(i.base)}</span></div>
-      ${Number(i.descuento)?`<div class="kv"><span>Descuento hermanos</span>
-        <span style="color:var(--ok)">−${eur(i.descuento)}</span></div>`:''}
-      <div class="kv sum"><span>Importe</span><span>${eur(i.importe)}</span></div>
-      <div class="kv"><span>Estado</span><span>${tagPay(i.estado)}</span></div>
-      ${i.motivo_devolucion?hint('Motivo: <strong>'+esc(i.motivo_devolucion)+
-        '</strong>','bad'):''}
-      ${i.estado==='sin_mandato'?hint('Esta familia todavía no ha domiciliado la '+
-        'cuota. Sin mandato no se puede pasar el recibo.','warn'):''}
-      <div class="btns" style="margin-top:16px">
-        ${['devuelto','pendiente','sin_mandato'].includes(i.estado)?`
-          <button class="btn btn-2" onclick="Board.marcarPago('${id}')">Cobrado en mano</button>`:''}
-        ${i.estado==='devuelto'?`
-          <button class="btn" onclick="Board.reintentar('${id}')">Reintentar cargo</button>`:''}
-      </div>`);
-  },
-  marcarPago(id){
-    Data.updateInvoice(id,{ estado:'cobro_manual', metodo:'Efectivo' });
-    closeSheet(); toast('Registrado como cobrado en mano'); Shell.render();
-  },
-  reintentar(id){
-    Data.updateInvoice(id,{ estado:'en_proceso', motivo_devolucion:null });
-    closeSheet(); toast('Cargo relanzado'); Shell.render();
-  },
-
   /* ==================== LOPIVI ==================== */
   lopivi(){
     const cs = Data.certs();
@@ -557,7 +451,7 @@ const Board = {
     <h1 class="t-page">El club</h1>
     <p class="t-sub">${esc(c.nombre)} · desde ${c.fundado}</p>
 
-    <div class="t-sec">Categorías, grupos y cuotas</div>
+    <div class="t-sec">Categorías y grupos</div>
     ${hint('Una categoría puede tener varios grupos (A y B). Los jugadores se '+
       'pueden subir y bajar entre ellos, y un entrenador ve a los de su grupo '+
       'más los del hermano cuando convoca.')}
@@ -567,7 +461,7 @@ const Board = {
         <div class="panel-hd" style="margin-bottom:10px">
           <b>${esc(cat.nombre)}</b>
           <button class="btn btn-2 btn-sm" onclick="Board.editarCat('${cat.id}')">
-            ${eur(cat.cuota)}/mes</button></div>
+            Editar</button></div>
         ${eqs.map(t=>`<div class="kv">
           <span>${esc(t.nombre)}${t.nivel?'':' <span class="tag t-mute">grupo único</span>'}</span>
           <span>${Data.teamPlayers(t.id).length} jugadores · ${
@@ -627,8 +521,8 @@ const Board = {
   },
   copiaSeguridad(){
     sheet('Copia de seguridad', `
-      ${hint('Descarga un archivo con todo: club, cuentas, fichas, partidos y '+
-        'cuotas. Guárdalo en un sitio seguro y entrégaselo a la junta entrante.')}
+      ${hint('Descarga un archivo con todo: club, cuentas, fichas y partidos. '+
+        'Guárdalo en un sitio seguro y entrégaselo a la junta entrante.')}
       ${hint('Contiene datos personales de menores. Trátalo como un documento '+
         'confidencial.','warn')}
       <button class="btn btn-accent" onclick="Board.bajarCopia()">
@@ -670,8 +564,8 @@ const Board = {
     const sig = new Date().getFullYear();
     sheet('Cerrar temporada', `
       ${hint('Se archiva la temporada actual y cada deportista sube de categoría. '+
-        'Se conservan las fichas y el historial; se vacían eventos, partidos y '+
-        'recibos para empezar limpio.')}
+        'Se conservan las fichas y el historial; se vacían eventos y partidos '+
+        'para empezar limpio.')}
       <div class="f"><label for="ctN">Nueva temporada</label>
         <input class="in" id="ctN" value="${sig}-${String(sig+1).slice(2)}"></div>
       <div class="t-sec">Qué pasa con cada uno</div>
@@ -709,7 +603,7 @@ const Board = {
     confirmSheet('Confirmar el cierre',
       'Se archivará '+Data.season().nombre+' y se abrirá '+nombre+'. '+
       (n?n+' deportistas serán dados de baja. ':'')+
-      'Se borrarán eventos, partidos y recibos de la temporada anterior.',
+      'Se borrarán eventos y partidos de la temporada anterior.',
       'Cerrar temporada', ()=>{
         try{ const r = Data.cerrarTemporada(nombre, movs);
           toast(r.subidos+' promocionados, '+r.bajas+' bajas');
@@ -724,7 +618,7 @@ const Board = {
     const sug = ['A','B','C','D'].find(l=>!eqs.some(t=>(t.nivel||'')===l)) || 'B';
     sheet('Nuevo grupo en '+cat.nombre, `
       ${hint('Se usa cuando una categoría tiene dos equipos: por ejemplo un '+
-        'grupo de rendimiento y otro de promoción. Comparten categoría y cuota.')}
+        'grupo de rendimiento y otro de promoción. Comparten categoría.')}
       <div class="f"><label for="ngL">Letra del grupo</label>
         <input class="in code" id="ngL" maxlength="1" value="${sug}"
           oninput="this.value=this.value.toUpperCase()"></div>
@@ -741,26 +635,25 @@ const Board = {
     sheet('Nueva categoría', `
       <div class="f"><label for="ncN2">Nombre</label>
         <input class="in" id="ncN2" placeholder="Sub-20"></div>
-      <div class="f"><label for="ncC2">Cuota mensual (€)</label>
-        <input class="in" id="ncC2" type="number" min="0" value="40"></div>
       <button class="btn" onclick="Board.guardarCat()">Crear categoría</button>`);
   },
   guardarCat(){
     const n = val('ncN2');
     if(!n){ toast('Ponle nombre'); return; }
-    Data.addCategory(n, val('ncC2'));
+    Data.addCategory(n);
     closeSheet(); toast('Categoría creada'); Shell.render();
   },
   editarCat(id){
     const c = Data.categories().find(x=>x.id===id);
     sheet(c.nombre, `
-      <div class="f"><label for="ecC">Cuota mensual (€)</label>
-        <input class="in" id="ecC" type="number" min="0" value="${c.cuota}">
-        <div class="help">Afecta a los recibos que emitas a partir de ahora.</div></div>
+      <div class="f"><label for="ecN">Nombre</label>
+        <input class="in" id="ecN" value="${esc(c.nombre)}"></div>
       <button class="btn" onclick="Board.guardarEditCat('${id}')">Guardar</button>`);
   },
   guardarEditCat(id){
-    Data.updateCategory(id,{ cuota:+val('ecC')||0 });
-    closeSheet(); toast('Cuota actualizada'); Shell.render();
+    const n = val('ecN');
+    if(!n){ toast('Ponle nombre'); return; }
+    Data.updateCategory(id,{ nombre:n });
+    closeSheet(); toast('Categoría actualizada'); Shell.render();
   }
 };

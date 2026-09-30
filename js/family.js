@@ -50,7 +50,7 @@ const Family = {
       <div class="sk"><span class="skb">${I.check(13)}</span>
         <span>Tú confirmas si va, desde la pantalla de inicio</span></div>
       <div class="sk"><span class="skb">${I.check(13)}</span>
-        <span>Firmas la documentación y domicilias la cuota</span></div>
+        <span>Firmas la documentación</span></div>
     </div>`;
   },
 
@@ -85,8 +85,6 @@ const Family = {
 
     const posts = Data.posts(l.map(p=>Data.playerTeam(p.id)?.id).filter(Boolean));
     const docsPend = l.flatMap(p=>Data.pendingDocs(p.id).map(d=>({p,d})));
-    const g = Data.myGuardian();
-    const mand = g ? Data.mandate(g.id) : null;
 
     return `
     <h1 class="t-page">Hola, ${esc(Data.me().nombre.split(' ')[0])}</h1>
@@ -96,15 +94,6 @@ const Family = {
     ${pend.length ? `<div class="t-sec">Falta tu respuesta</div>
       ${pend.slice(0,3).map(({e,p})=>this.tarjeta(e,p)).join('')}`
     : hint('Todo confirmado. No tienes nada pendiente de responder.','ok')}
-
-    ${!mand && !this.esJugador() ? `
-      <div class="panel lead">
-        <b style="display:block;margin-bottom:4px">Falta domiciliar la cuota</b>
-        <span class="tiny">Sin domiciliación el club no puede pasar el recibo
-          y tendrás que pagar en mano cada mes.</span>
-        <button class="btn btn-2 btn-sm" style="width:100%;margin-top:11px"
-          onclick="Family.firmarMandato()">Domiciliar ahora</button>
-      </div>`:''}
 
     ${docsPend.length ? `
       <div class="panel lead">
@@ -202,7 +191,7 @@ const Family = {
           <input class="in" id="pF" type="date"></div>
         <div class="f"><label for="pC">Categoría</label>
           <select class="in" id="pC">${ts.map(t=>
-            `<option value="${t.id}">${esc(t.nombre)} · ${eur(t.cat?.cuota||0)}/mes</option>`
+            `<option value="${t.id}">${esc(t.nombre)}</option>`
           ).join('')}</select></div>
       </div>
       <div class="f2">
@@ -224,8 +213,7 @@ const Family = {
           placeholder="Déjalo vacío si no hay nada relevante"></textarea>
         <div class="help">Solo la verán el entrenador y la junta, para poder
           actuar en caso de urgencia.</div></div>
-      ${this.mios().length ? hint('Al segundo hermano se le aplica un 15% de '+
-        'descuento en la cuota automáticamente.','ok') : ''}
+            ${this.mios().length ? hint('Inscribes a otro hijo en el mismo club.','ok') : ''}
       <button class="btn btn-accent" onclick="Family.guardarJugador()">
         Inscribir</button>`);
   },
@@ -242,12 +230,10 @@ const Family = {
       sheet('Inscripción completada', `
         ${hint('<strong>'+esc(p.nombre)+'</strong> ya forma parte de '+
           esc(Data.playerTeam(p.id)?.nombre||'')+'.','ok')}
-        <div class="t-sec">Quedan dos cosas</div>
+        <div class="t-sec">Queda una cosa</div>
         <div class="panel">
           <div class="sk"><span class="skb">${I.check(13)}</span>
             <span>Firmar ${pend.length} documentos obligatorios</span></div>
-          <div class="sk"><span class="skb">${I.check(13)}</span>
-            <span>Domiciliar la cuota mensual</span></div>
         </div>
         <button class="btn btn-accent" onclick="closeSheet();Shell.goTab('mas')">
           Completar ahora</button>
@@ -537,15 +523,10 @@ const Family = {
   /* ==================== MÁS ==================== */
   mas(){
     const l = this.mios();
-    const g = Data.myGuardian();
-    const mand = g ? Data.mandate(g.id) : null;
-    const invs = Data.invoices({ playerIds:l.map(p=>p.id) });
-    const total = invs.filter(i=>i.estado!=='pagado')
-      .reduce((a,b)=>a+Number(b.importe),0);
 
     return `
     <h1 class="t-page">Más</h1>
-    <p class="t-sub">Documentación, cuotas y cuenta</p>
+    <p class="t-sub">Documentación y cuenta</p>
 
     ${!this.esJugador() && l.length ? `
       <div class="t-sec">Documentación</div>
@@ -558,38 +539,6 @@ const Family = {
           <div class="row-e">${pend.length?tag('Pendiente','t-warn'):tag('Completo','t-ok')}</div>
         </button>`;
       }).join('')}</div>
-
-      <div class="t-sec">Cuota</div>
-      ${mand ? `<div class="panel">
-        <div class="kv"><span>Cuenta</span><span>${esc(mand.iban)}</span></div>
-        <div class="kv"><span>Titular</span><span>${esc(mand.titular)}</span></div>
-        <div class="kv"><span>Estado</span><span>${tag('Domiciliada','t-ok')}</span></div>
-      </div>`
-      : `<div class="panel lead">
-        <b style="display:block;margin-bottom:4px">Sin domiciliar</b>
-        <span class="tiny">Mientras no domicilies, el club no puede pasar el recibo.</span>
-        <button class="btn btn-accent btn-sm" style="width:100%;margin-top:11px"
-          onclick="Family.firmarMandato()">Domiciliar la cuota</button>
-      </div>`}
-
-      ${invs.length ? `<div class="rows">${invs.slice(0,6).map(i=>{
-        const p = Data.player(i.player_id);
-        return `<div class="row">
-          <div class="ava sq">${I.euro(18)}</div>
-          <div class="row-b"><b>${esc(i.concepto)}</b>
-            <span>${esc(p?p.nombre.split(' ')[0]:'')}</span></div>
-          <div class="row-e"><span class="amt">${eur(i.importe)}</span>
-            ${tagPay(i.estado)}</div>
-        </div>`;
-      }).join('')}</div>
-      ${invs.some(i=>i.estado==='en_proceso')
-        ? hint('Los cargos por domiciliación tardan unos <strong>6 días hábiles</strong> '+
-            'en confirmarse en el banco.')
-        : ''}
-      ${invs.some(i=>i.estado==='devuelto')
-        ? hint('Un recibo ha sido devuelto. Contacta con el club para regularizarlo.','bad')
-        : ''}`
-      : `<p class="tiny">El club todavía no ha emitido ninguna cuota.</p>`}
     `:''}
 
     <div class="t-sec">Notificaciones</div>
@@ -626,29 +575,5 @@ const Family = {
     Data.sign(pid,did);
     toast('Documento firmado');
     this.docs(pid);
-  },
-  firmarMandato(){
-    const g = Data.myGuardian();
-    if(!g){ toast('Tu cuenta no está registrada como familia'); return; }
-    sheet('Domiciliar la cuota', `
-      ${hint('El club no guarda tu número de cuenta completo y no te cobra '+
-        'ninguna comisión por domiciliar.')}
-      <div class="f"><label for="mT">Titular de la cuenta</label>
-        <input class="in" id="mT" value="${esc(Data.me().nombre)}"></div>
-      <div class="f"><label for="mI">IBAN</label>
-        <input class="in" id="mI" placeholder="ES00 0000 0000 0000 0000 0000"
-          autocomplete="off">
-        <div class="help">Autorizas a ${esc(Data.club().nombre)} a enviar órdenes
-          de cargo a tu cuenta y a tu banco a cargarlas conforme a esas
-          instrucciones. Puedes revocarlo cuando quieras.</div></div>
-      ${hint('Cada cargo tarda unos 6 días hábiles en confirmarse.','warn')}
-      <button class="btn btn-accent" onclick="Family.guardarMandato()">
-        Firmar la domiciliación</button>`);
-  },
-  guardarMandato(){
-    try{
-      Data.signMandate(Data.myGuardian().id, val('mI'), val('mT'));
-      closeSheet(); toast('Domiciliación firmada'); Shell.render();
-    }catch(e){ toast(e.message); }
   }
 };

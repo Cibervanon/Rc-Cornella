@@ -66,14 +66,14 @@ const Backend = {
     members:      { tabla:'club_members',
                     clave: r => [r.club_id, r.user_id, r.rol].join(':') },
     invites:      { tabla:'invites',        pk:'code' },
-    categories:   { tabla:'categories',     num:['cuota','orden'] },
+    categories:   { tabla:'categories',     num:['orden'] },
     teams:        { tabla:'teams' },
     staff:        { tabla:'staff' },
     players:      { tabla:'players',        num:['peso','altura'] },
     guardians:    { tabla:'guardians' },
     links:        { tabla:'guardian_links',
                     clave: r => r.player_id + ':' + r.guardian_id },
-    enrollments:  { tabla:'enrollments',    num:['cuota','descuento'] },
+    enrollments:  { tabla:'enrollments' },
     certs:        { tabla:'certs' },
     events:       { tabla:'events' },
     rsvp:         { tabla:'rsvp',           num:['recordatorios'] },
@@ -97,9 +97,6 @@ const Backend = {
                     clave: r => r.post_id + ':' + r.user_id },
     tasks:        { tabla:'tasks' },
     notifs:       { tabla:'notifications' },
-    invoices:     { tabla:'invoices',
-                    num:['base','descuento','importe','avisos'] },
-    mandates:     { tabla:'mandates' },
     docs:         { tabla:'documents' },
     signatures:   { tabla:'signatures' },
     historico:    { tabla:'season_history',
@@ -108,10 +105,10 @@ const Backend = {
                     /* Sin esto el lote entero lo rechaza PostgREST con PGRST204
                        ("columna no encontrada") y `pendientes` se queda a true
                        para siempre: el cierre de temporada nunca llega al
-                       servidor. La columna las crea la migracion 006.
-                       Solo se renombra `porJugador`: poner aqui un nombre
-                       igual en los dos lados (facturas:facturas) haria que
-                       aFila() lo borrase al "renombrarlo". */
+                       servidor. La columna la crea la migracion 006.
+                       OJO: aqui no se puede poner un nombre que sea igual en
+                       los dos lados: aFila() hace `f[a]=f[de]; delete f[de]` y
+                       con origen y destino iguales borraria el campo. */
                     col:{ porJugador:'por_jugador' } },
     audit:        { tabla:'audit_log',
                     /* La columna se llama user_id. Mandando `user` fallaba el
@@ -120,7 +117,7 @@ const Backend = {
   },
 
   /* Tablas legibles sin iniciar sesión: son lo que se muestra en la pantalla
-     de acceso antes de que nadie haya entrado (nombre, categorías, cuotas).
+     de acceso antes de que nadie haya entrado (nombre del club y categorías).
      OJO: esto NO significa "sin filtro de club". `seasons`, `categories`,
      `teams` y `documents` todas tienen club_id, y leerlas sin filtrar traía
      los datos de todos los clubes del proyecto y hacía que d.season se quedara
@@ -252,7 +249,7 @@ const Backend = {
                        'enrollments','certs','events','rsvp','callups',
                        'attendance','matches','drills','sessions','sessionDrills',
                        'pruebas','evaluations','notes','injuries','goals','posts',
-                       'reads','tasks','notifs','invoices','mandates','signatures',
+                       'reads','tasks','notifs','signatures',
                        'historico','audit','invites'];
         for(const coll of orden){
           const ok = await this.bajar(this.mapa[coll].tabla, filas => meter(coll, filas));

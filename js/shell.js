@@ -126,7 +126,7 @@ const Shell = {
              'Recuerda solo a quien no ha respondido, con un botón'],
       familia:['Inscribe a tu hijo o hija en su categoría',
              'Confirma la asistencia desde la pantalla de inicio',
-             'Firma la documentación y domicilia la cuota'],
+             'Firma la documentación'],
       jugador:['Confirma si vas a los entrenamientos y partidos',
              'Consulta la hora de citación y el lugar',
              'Sigue tus objetivos y la valoración del entrenador']

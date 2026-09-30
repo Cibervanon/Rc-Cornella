@@ -499,16 +499,12 @@ const Gate = {
       <button class="back" onclick="Gate.asistente.n=1;Shell.render()">${I.chevL(16)} Atrás</button>
       ${bar}
       <h2>Categorías</h2>
-      <p class="lead">Ajusta las cuotas o quita las que no tenga el club.
-        Podrás cambiarlas después.</p>
+      <p class="lead">Deja las que tenga el club. Podrás cambiarlas después.</p>
       <div class="rows">
         ${F.cats.map((c,i)=>`<div class="row">
           <div class="ava sq">${esc(c.n.replace('Sub-','S'))}</div>
-          <div class="row-b"><b>${esc(c.n)}</b><span>Cuota mensual</span></div>
-          <div class="row-e" style="flex-direction:row;align-items:center;gap:6px">
-            <input class="in" style="width:78px;min-height:40px;padding:7px 9px;
-              text-align:right" type="number" min="0" value="${c.cuota}"
-              onchange="Gate.asistente.cats[${i}].cuota=+this.value">
+          <div class="row-b"><b>${esc(c.n)}</b><span>Categoría</span></div>
+          <div class="row-e">
             <button class="ibtn" title="Quitar" onclick="Gate.quitarCat(${i})">${I.trash(17)}</button>
           </div>
         </div>`).join('')}
@@ -544,14 +540,12 @@ const Gate = {
     sheet('Nueva categoría', `
       <div class="f"><label for="ncN">Nombre</label>
         <input class="in" id="ncN" placeholder="Sub-20"></div>
-      <div class="f"><label for="ncC">Cuota mensual (€)</label>
-        <input class="in" id="ncC" type="number" min="0" value="40"></div>
       <button class="btn" onclick="Gate.addCatOk()">Añadir</button>`);
   },
   addCatOk(){
     const n = val('ncN');
     if(!n){ toast('Ponle nombre a la categoría'); return; }
-    this.asistente.cats.push({ n, cuota:+val('ncC')||0 });
+    this.asistente.cats.push({ n });
     closeSheet(); Shell.render();
   },
   quitarCat(i){
@@ -593,7 +587,7 @@ const Gate = {
             p_nombre: this.asistente.club.nombre, p_ciudad: this.asistente.club.ciudad,
             p_temporada: this.asistente.club.temporada, p_user_id: userId,
             p_nombre_usuario: nombre, p_email: email,
-            p_categorias: this.asistente.cats.map(c => ({ n:c.n, cuota:+c.cuota || 0 })),
+            p_categorias: this.asistente.cats.map(c => ({ n:c.n })),
             p_family_code: familyCode
           });
         }
