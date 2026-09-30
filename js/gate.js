@@ -26,6 +26,61 @@ const Gate = {
 
   reset(s){ this.step=s; this.err=null; Shell.render(); },
 
+  /* Repintar rehace el DOM entero, asi que los inputs se quedan vacios. Con
+     Enter se notaba mucho: al darle a Intro la casilla de la contrasena se
+     vaciaba sola. Esto vuelve a poner el valor DESPUES de repintar, de modo
+     que la contrasena no llega a meterse en el HTML. */
+  repintar(id, valor){
+    Shell.render();
+    if(id && valor){ const e = document.getElementById(id); if(e) e.value = valor; }
+  },
+
+  /** Muestra u oculta la contrasena. El boton cambia de icono y de etiqueta
+      para los lectores de pantalla, no solo de aspecto. */
+  verPass(id, btn){
+    const e = document.getElementById(id); if(!e) return;
+    const ver = e.type === 'password';
+    e.type = ver ? 'text' : 'password';
+    btn.innerHTML = ver ? I.eyeOff(20) : I.eye(20);
+    btn.classList.toggle('on', ver);
+    btn.setAttribute('aria-label', ver ? 'Ocultar la contrasena' : 'Ver la contrasena');
+    btn.setAttribute('aria-pressed', ver ? 'true' : 'false');
+    e.focus();
+  },
+
+  /** Campo de contrasena con su boton de "verla". `onenter` es lo que pasa
+      al pulsar Intro, para no repetir el atributo en cada pantalla. */
+  campoPass({ id, etiqueta, autocomplete, onenter, ayuda, placeholder }){
+    return `
+    <div class="f pw">
+      <label for="${id}">${etiqueta}</label>
+      <div class="pw-box">
+        <input class="in" id="${id}" type="password"${placeholder?` placeholder="${placeholder}"`:''}
+          autocomplete="${autocomplete}"${onenter?` onkeydown="${onenter}"`:''}>
+        <button type="button" class="pw-btn" aria-label="Ver la contrasena"
+          aria-pressed="false" onclick="Gate.verPass('${id}', this)">${I.eye(20)}</button>
+      </div>
+      ${ayuda ? `<div class="help">${ayuda}</div>` : ''}
+    </div>`;
+  },
+
+  /** Crea la cuenta o, si ya existe, entra con ella. Hace falta para el
+      reintento: al fundar, la cuenta de Supabase se crea ANTES que el club, y
+      si el club falla la cuenta se queda a medias. Al reintentar, Volver a
+      crear la cuenta da error de "ya existe"; con esto se reutiliza. */
+  async registrarOCrear(email, password, nombre){
+    try{
+      return await Backend.registrar({ email, password, nombre });
+    }catch(e){
+      try{
+        const r = await Backend.entrarConPassword(email, password);
+        return { uid: r.uid, pendiente: false, yaExistia: true };
+      }catch(e2){
+        throw e;   // Se enseña el error que explica de verdad el problema.
+      }
+    }
+  },
+
   /** Olvida la cuenta de Google pendiente. Al volver al inicio, quien entre
       otra vez con Google tiene que poder leer de nuevo su nombre y email. */
   resetearGoogle(){ this.pendienteGoogle=null; this.googlePid=false; },
@@ -37,12 +92,17 @@ const Gate = {
 
   /** Cuando hay sesión abierta pero ningún permiso en el club (por ejemplo
       alguien que acaba de entrar con Google), el único camino posible es un
-      código. Se fuerza esa pantalla. */
+      código. Se fuerza esa pantalla.
+
+      Antes se salía con `if(!Data.clubExists()) return;`, y ese era justo el
+      caso roto: al fallar la fundación no queda club en local, asi que nunca
+      saltaba la pantalla de código y el usuario se quedaba sin salida. Ahora
+      se muestra siempre. Sin club en local no hay riesgo: validar el código
+      pide la identidad del club al servidor y la anota. */
   revisarSesion(){
     if(!backendListo() || !Backend.uid) return;
     if(Data.myRoles().length) return;
-    if(!Data.clubExists()) return;
-    this.step = 'codigo';
+    if(this.step !== 'codigo' && this.step !== 'datos') this.step = 'codigo';
     this.cargarCuentaGoogle();
   },
 
@@ -96,6 +156,15 @@ const Gate = {
       'los códigos de acceso al resto: cuerpo técnico y familias.')}
     <button class="btn btn-accent" onclick="Gate.reset('fundar')">
       ${I.plus(18)} Crear el club</button>
+    <div class="t-sec">Ya me han dado un código</div>
+    <button class="choice" onclick="Gate.reset('codigo')">
+      <span class="ci">${I.key(20)}</span>
+      <span class="ct"><b>Tengo un código del club</b>
+        <span>Para familias, jugadores y cuerpo técnico</span></span>
+      <span class="cg">${I.chevron(18)}</span>
+    </button>
+    ${hint('Si ya te registraste antes, entra con tu cuenta: es más rápido que '+
+      'volver a escribir el código.')}
     <div class="links">
       <button class="link" onclick="Gate.reset('login')">Ya tengo cuenta</button>
     </div>`;
@@ -173,13 +242,32 @@ const Gate = {
     if(!c){ this.err='Escribe el código que te ha dado el club'; return Shell.render(); }
     this.busy = true; this.err = null; Shell.render();
     try{
-      const r = backendListo() ? await Backend.comprobarCodigo(c) : Data.peekCode(c);
-      if(!r.ok){ this.err = r.error; this.busy=false; return Shell.render(); }
-      this.rolDetectado = r.rol;
-      // En la nube solo hace falta el equipo: el contador de usos lo lleva el
-      // servidor, y la tabla de códigos no es editable fuera de la junta.
-      this.invite = backendListo() ? { code:c, rol:r.rol, team_id:r.team_id }
-                                   : r.invite;
+      /* Movil nuevo: no hay club en local y todavia no hay cuenta (la se crea en
+         el paso siguiente). redeem_invite() es una funcion de seguridad y pide
+         sesion, asi que aqui daria "Inicia sesion para comprobar el codigo" y
+         un invitado nuevo no tendria forma de pasar. Por eso, cuando no hay club
+         descargado, se pregunta con club_by_code(), que si acepta anon: comprueba
+         el codigo, dice de que rol va el alta y deja el club copiado del servidor
+         con sus ids, que si no al subir los datos escribiria sobre un club
+         inexistente. */
+      if(backendListo() && !Data.clubExists()){
+        const club = await Backend.clubPorCodigo(c);
+        if(!club || !club.ok){
+          this.err = (club && club.error) || 'Ese código no existe';
+          this.busy = false; return Shell.render();
+        }
+        Data.seedClubDesdeServidor(club);
+        this.rolDetectado = club.rol;
+        this.invite = { code:c, rol:club.rol, team_id:club.team_id };
+      } else {
+        const r = backendListo() ? await Backend.comprobarCodigo(c) : Data.peekCode(c);
+        if(!r.ok){ this.err = r.error; this.busy=false; return Shell.render(); }
+        this.rolDetectado = r.rol;
+        // En la nube solo hace falta el equipo: el contador de usos lo lleva el
+        // servidor, y la tabla de códigos no es editable fuera de la junta.
+        this.invite = backendListo() ? { code:c, rol:r.rol, team_id:r.team_id }
+                                     : r.invite;
+      }
       this.err = null;
       this.step = 'datos';
     }catch(e){
@@ -230,12 +318,9 @@ const Gate = {
       <label for="rT">Teléfono ${this.rolDetectado==='familia'?'':'<span class="muted">(opcional)</span>'}</label>
       <input class="in" id="rT" type="tel" inputmode="tel" autocomplete="tel">
     </div>
-    ${g ? '' : `
-    <div class="f">
-      <label for="rP">Contraseña</label>
-      <input class="in" id="rP" type="password" autocomplete="new-password">
-      <div class="help">Mínimo 8 caracteres.</div>
-    </div>`}
+    ${g ? '' : this.campoPass({ id:'rP', etiqueta:'Contraseña',
+      autocomplete:'new-password', ayuda:'Mínimo 8 caracteres.',
+      onenter:"if(event.key==='Enter')Gate.doRegister()" })}
     <label class="check">
       <input type="checkbox" id="rOk">
       <span>He leído y acepto la política de privacidad del club. Si inscribo a
@@ -258,10 +343,10 @@ const Gate = {
       return Shell.render(); }
     const nombre = this.vNombre, email = this.vEmail, tel = this.vTel;
     if(!this.pendienteGoogle && (this.vPass||'').length < 8){
-      this.err='La contraseña debe tener al menos 8 caracteres'; return Shell.render();
-    }
+      this.err='La contraseña debe tener al menos 8 caracteres';
+      return this.repintar('rP', this.vPass); }
 
-    this.busy = true; this.err = null; Shell.render();
+    this.busy = true; this.err = null; this.repintar('rP', this.vPass);
     try{
       let userId = null, resuelto = null;
 
@@ -272,7 +357,9 @@ const Gate = {
         if(!chk.ok) throw new Error(chk.error);
 
         if(!this.pendienteGoogle){
-          const alta = await Backend.registrar({ email, password:val('rP'), nombre, tel });
+          /* De `this.vPass`, no de val('rP'): el repintado de arriba ya ha
+             vuelto a crear el campo y val('rP') vendria vacio. */
+          const alta = await Backend.registrar({ email, password:this.vPass, nombre, tel });
           if(alta.pendiente) throw new Error(
             'Te hemos enviado un correo para confirmar la dirección. '+
             'Confírmala y vuelve a intentarlo.');
@@ -292,19 +379,19 @@ const Gate = {
       Data.register({ nombre, email, tel,
         password: this.pendienteGoogle ? null : this.vPass,
         code:this.invite.code, userId, resuelto });
-      this.err=null; this.step=null; this.pendienteGoogle=null;
+      this.err=null; this.step=null; this.pendienteGoogle=null; this.vPass=null;
       await Shell.afterAuth(true);
     }catch(e){
       this.err = e.message || 'No se ha podido crear la cuenta';
     }
     this.busy = false;
-    Shell.render();
+    this.repintar('rP', this.vPass);
   },
 
   /* ---------- inicio de sesión ---------- */
   login(){ return `
-    ${Data.clubExists() ? `<button class="back" onclick="Gate.reset('elegir')">
-      ${I.chevL(16)} Volver</button>` : ''}
+    <button class="back" onclick="Gate.reset('${Data.clubExists()?'elegir':'bienvenida'}')">
+      ${I.chevL(16)} Volver</button>
     <h2>Iniciar sesión</h2>
     <p class="lead">Entra con el email con el que te registraste.</p>
     <div class="f">
@@ -312,11 +399,9 @@ const Gate = {
       <input class="in" id="lE" type="email" inputmode="email" autocomplete="email"
         value="${esc(this.vEmail||'')}">
     </div>
-    <div class="f">
-      <label for="lP">Contraseña</label>
-      <input class="in" id="lP" type="password" autocomplete="current-password"
-             onkeydown="if(event.key==='Enter')Gate.doLogin()">
-    </div>
+    ${this.campoPass({ id:'lP', etiqueta:'Contraseña',
+      autocomplete:'current-password',
+      onenter:"if(event.key==='Enter')Gate.doLogin()" })}
     <button class="btn" onclick="Gate.doLogin()" ${this.busy?'disabled':''}>
       ${this.busy?'Entrando…':'Entrar'}</button>
     ${this.conGoogle() ? `<div class="or"><span>o</span></div>${this.botonGoogle()}` : ''}
@@ -330,29 +415,31 @@ const Gate = {
   async doLogin(){
     if(this.busy) return;
     const email = val('lE'), password = val('lP');
-    /* El email se recuerda: si la contrasena falla, el formulario se repinta y
-       no hace falta volver a escribirlo. La contrasena nunca se guarda. */
-    this.vEmail = email;
+    /* Se conservan email y contrasena entre repintados. La contrasena vive solo
+       en memoria y se vuelve a poner en el campo con JS, nunca en el HTML: asi
+       al pulsar Intro no desaparece de la pantalla. */
+    this.vEmail = email; this.vPass = password;
     if(!email || !password){ this.err='Escribe tu email y tu contraseña';
-      return Shell.render(); }
-    this.busy = true; this.err = null; Shell.render();
+      return this.repintar('lP', password); }
+    this.busy = true; this.err = null; this.repintar('lP', password);
     try{
       if(backendListo()){
         const r = await Backend.entrarConPassword(email, password);
         if(!r.roles.length)
           throw new Error('Tu cuenta existe pero todavía no tiene acceso a este club. '+
-                          'Necesitas un código de la junta directiva.');
+            'Si eres quien lo creó, vuelve a intentar fundarlo: se reparará solo. '+
+            'Si no, necesitas un código de la junta directiva.');
         Data.setSession({ userId:r.uid, rol:r.roles[0] });
       }else{
         Data.login(email, password);
       }
-      this.err=null; this.step=null;
+      this.err=null; this.step=null; this.vPass=null;
       await Shell.afterAuth(false);
     }catch(e){
       this.err = e.message || 'No se ha podido iniciar sesión';
     }
     this.busy = false;
-    Shell.render();
+    this.repintar('lP', password);
   },
 
   forgot(){
@@ -440,9 +527,9 @@ const Gate = {
       <div class="f"><label for="fE">Email</label>
         <input class="in" id="fE" type="email" inputmode="email" autocomplete="email"
           value="${esc(this.vEmail||'')}"></div>
-      <div class="f"><label for="fP">Contraseña</label>
-        <input class="in" id="fP" type="password" autocomplete="new-password">
-        <div class="help">Mínimo 8 caracteres.</div></div>
+      ${this.campoPass({ id:'fP', etiqueta:'Contraseña', autocomplete:'new-password',
+      ayuda:'Mínimo 8 caracteres.',
+      onenter:"if(event.key==='Enter')Gate.doFundar()" })}
       <button class="btn btn-accent" onclick="Gate.doFundar()" ${this.busy?'disabled':''}>
         ${this.busy?'Un momento…':'Crear el club'}</button>`;
   },
@@ -475,10 +562,15 @@ const Gate = {
     if(this.busy) return;
     /* Los campos se leen ANTES de repintar. Shell.render() rehace el formulario
        entero, asi que leerlos despues devuelve cadena vacia y el alta fallaba
-       siempre con "el email no tiene un formato valido". */
+       siempre con "el email no tiene un formato valido". La contrasena tambien
+       se guarda, para poder reintentar sin teclearla otra vez. */
     const nombre = val('fN'), email = val('fE'), password = val('fP');
-    this.vNombre = nombre; this.vEmail = email;
-    this.busy = true; this.err = null; Shell.render();
+    this.vNombre = nombre; this.vEmail = email; this.vPass = password;
+    if(!this.vPass || password.length < 8){
+      this.err = 'La contraseña debe tener al menos 8 caracteres';
+      return this.repintar('fP', password);
+    }
+    this.busy = true; this.err = null; this.repintar('fP', password);
     (async () => {
       try{
         let userId = null, ids = null, familyCode = null;
@@ -488,7 +580,10 @@ const Gate = {
           // que la copia del servidor y la del dispositivo sean la misma.
           ids = Data.idsParaFundar();
           familyCode = makeCode();
-          const alta = await Backend.registrar({ email, password, nombre });
+          /* Crear la cuenta o entrar si ya estaba. Al fallar el club, la cuenta
+             queda creada y el reintento topa con "ya existe": con esto se
+             reutiliza y el fundador recupera el acceso de junta sin codigo. */
+          const alta = await this.registrarOCrear(email, password, nombre);
           if(alta.pendiente) throw new Error(
             'Te hemos enviado un correo para confirmar la dirección. '+
             'Confírmala y vuelve a abrir la aplicación para fundar el club.');
@@ -506,13 +601,15 @@ const Gate = {
         Data.foundClub({ clubNombre:this.asistente.club.nombre, ciudad:this.asistente.club.ciudad,
           temporada:this.asistente.club.temporada, userNombre:nombre, email, password,
           categorias:this.asistente.cats, userId, ids, familyCode });
-        this.err=null; this.step=null;
+        this.err=null; this.step=null; this.vPass=null;
         await Shell.afterAuth(true);
       }catch(e){
+        /* No se pierde lo escrito: el asistente sigue en la pantalla 3 con los
+           datos puestos, para poder darle otra vez a "Crear el club". */
         this.err = e.message || 'No se ha podido crear el club';
       }
       this.busy = false;
-      Shell.render();
+      this.repintar('fP', password);
     })();
   }
 };

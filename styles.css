@@ -252,6 +252,17 @@ button.row:active{background:#F5F3F1}
   font-family:inherit;transition:border-color .12s}
 .in:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px rgba(18,18,18,.07)}
 .in.bad{border-color:var(--bad)}
+/* Campo de contrasena con boton para verla. El boton se centra respecto al
+   input, no respecto a la etiqueta, para que aguante etiquetas de dos lineas. */
+.pw-box{position:relative}
+.pw-box .in{padding-right:48px}
+.pw-btn{position:absolute;right:4px;top:50%;transform:translateY(-50%);
+  display:flex;align-items:center;justify-content:center;
+  width:40px;height:40px;padding:0;border:0;border-radius:10px;cursor:pointer;
+  background:transparent;color:var(--t3)}
+.pw-btn:hover{background:var(--line);color:var(--t2)}
+.pw-btn:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+.pw-btn.on{color:var(--ink)}
 .in.code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
   text-transform:uppercase;letter-spacing:.18em;font-size:19px;text-align:center;
   font-weight:700}

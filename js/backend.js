@@ -410,6 +410,10 @@ const Backend = {
     // signInWithOAuth redirige al proveedor: aquí no se sigue.
   },
 
+  /* Cerrar sesion es solo cerrar sesion. No se toca la copia local del club:
+     en modo nube obligaba a re-sincronizar todo y se perdia lo pendiente,
+     y en modo local (sin nube a la que volver) era perdida de datos.
+     Para borrar el club de verdad esta DB.wipe(). */
   async salir(){
     this.uid = null;
     this.clubId = null;
@@ -417,7 +421,6 @@ const Backend = {
     this.pendientes = false;
     clearTimeout(this.temporizador);
     if(this.sb) { try{ await this.sb.auth.signOut(); }catch(e){} }
-    DB.vaciar();
   },
 
   async recuperarPassword(email){
@@ -474,11 +477,20 @@ const Backend = {
      ver los códigos que ha generado la junta.
      ======================================================================= */
 
-  async comprobarCodigo(codigo){
-    const { data, error } = await this.sb.rpc('redeem_invite', { p_code: codigo });
-    if(error) throw new Error(error.message);
-    return data;
-  },
+async comprobarCodigo(codigo){
+      const { data, error } = await this.sb.rpc('redeem_invite', { p_code: codigo });
+      if(error) throw new Error(error.message);
+      return data;
+    },
+
+    /* Identidad del club a partir de un codigo, para poder darse de alta en un
+       dispositivo que aun no tiene el club descargado. Solo devuelve id,
+       nombre, ciudad y temporada: nada de miembros ni correos. */
+    async clubPorCodigo(codigo){
+      const { data, error } = await this.sb.rpc('club_by_code', { p_code: codigo });
+      if(error) throw new Error(error.message);
+      return data;
+    },
 
   async gastarCodigo(codigo){
     const { data, error } = await this.sb.rpc('consume_invite', { p_code: codigo });

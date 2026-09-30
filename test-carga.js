@@ -50,8 +50,29 @@ const sw = fs.readFileSync(path.join(__dirname, 'sw.js'), 'utf8');
 for (const f of orden) {
   if (!sw.includes(f)) { console.log('  XX  ' + f + ' no está en la caché de sw.js'); fail++; }
 }
-if (!/const CACHE = 'rccornella-v6'/.test(sw))
-  { console.log('  XX  la versión de caché no se ha subido'); fail++; }
+/* Y el número de la caché tiene que haber subido respecto a lo último
+   confirmado. Fijar aquí un número (v6, v7...) se rompe solo en la siguiente
+   subida, que es justo cuando deja de vigilar nada; lo que importa es que
+   quien publica haya subido el número para que los móviles no se queden
+   sirviendo la versión anterior. */
+const verCache = txt => {
+  const m = txt.match(/const CACHE = 'rccornella-v(\d+)'/);
+  return m ? Number(m[1]) : NaN;
+};
+const cacheActual = verCache(sw);
+let cacheConfirmada = NaN;
+try {
+  cacheConfirmada = verCache(
+    require('child_process').execFileSync('git', ['show', 'HEAD:sw.js'],
+      { cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
+} catch (e) { /* sin git no se puede comparar */ }
+
+if (!Number.isFinite(cacheActual))
+  { console.log('  XX  sw.js no declara la versión de caché'); fail++; }
+else if (Number.isFinite(cacheConfirmada) && cacheActual <= cacheConfirmada)
+  { console.log(`  XX  la versión de caché no se ha subido (v${cacheConfirmada} -> v${cacheActual})`); fail++; }
+else
+  { console.log(`  ·  caché rccornella-v${cacheActual}`); }
 
 /* Si hay service worker, tiene que tener los dos handlers de push. Un aviso que
    llega pero no se pinta es el fallo más difícil de detectar en un móvil. */

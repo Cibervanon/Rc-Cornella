@@ -75,14 +75,13 @@ const Shell = {
     }catch(e){ toast(e.message || 'No se ha podido cambiar'); }
   },
 
-  /** Cierra sesión en el servidor y en el dispositivo, y vuelve al acceso. */
+  /** Cierra sesión en el servidor y en el dispositivo, y vuelve al acceso.
+      La copia local del club se conserva: el club no desaparece al salir. */
   logout(){
     closeSheet();
     Data.endSession();
     if(typeof Backend !== 'undefined' && Backend.activo){
       Backend.salir().catch(()=>{});
-    }else{
-      DB.vaciar();
     }
     this.volver();
   },

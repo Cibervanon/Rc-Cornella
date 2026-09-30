@@ -514,7 +514,132 @@ function comprobar(nombre, condicion, detalle = '') {
   }, String(code));
   comprobar('un codigo gastado ya no vale', reutilizable === false);
 
-  console.log('\n8. Errores de JavaScript en el viaje completo');
+  /* --- 8. Lo que se quejaron al usar la app de verdad ------------------- */
+  console.log('\n8. Detalles de uso (los que fallaban al entrar a mano)');
+
+  // Ojo de ver la contrasena en las tres pantallas con password.
+  await p2.evaluate(() => { Data.setSession(null); Gate.step = 'login';
+    Shell.view = 'gate'; Shell.render(); });
+  await e2(250);
+  const conOjo = await p2.evaluate(() => document.querySelectorAll('.pw-btn').length);
+  comprobar('hay un boton para ver la contrasena', conOjo > 0, `${conOjo} botones`);
+  const ojo = await p2.evaluate(() => {
+    const b = document.querySelector('#lP'), btn = document.querySelector('.pw-btn');
+    if (!b || !btn) return { ok: false };
+    b.value = 'claveDePrueba';
+    btn.click();
+    return { tipo: b.type, valor: b.value, aria: btn.getAttribute('aria-pressed') };
+  });
+  comprobar('el boton enseña la contrasena', ojo.tipo === 'text' && ojo.valor === 'claveDePrueba',
+    JSON.stringify(ojo));
+  comprobar('y avisa a lectores de pantalla', ojo.aria === 'true', String(ojo.aria));
+
+  const volver = await p2.evaluate(() => !!document.querySelector('.back'));
+  comprobar('iniciar sesion tiene boton de volver', volver);
+
+  // Al fallar, nada de lo escrito puede desaparecer.
+  await pon('#lE', 'nadie@esteclub.test');
+  await pon('#lP', 'contrasenaLarga');
+  await p2.focus('#lP');
+  await p2.keyboard.press('Enter');
+  await e2(450);
+  const trasIntro = await p2.evaluate(() => ({
+    email: val('lE'), pass: val('lP'), err: Gate.err || ''
+  }));
+  comprobar('el email sobrevive al error de login', trasIntro.email === 'nadie@esteclub.test',
+    JSON.stringify(trasIntro.email));
+  comprobar('la contrasena sobrevive al error de login',
+    trasIntro.pass === 'contrasenaLarga', JSON.stringify(trasIntro.pass));
+  comprobar('y avisa del error', /no hay ninguna cuenta/i.test(trasIntro.err), trasIntro.err);
+
+  /* Salir de la sesion NO puede borrar el club: en local no hay nube de la que
+     volver a descargarlo, asi que era perdida de datos y de golpe. */
+  const antesDeSalir = await p2.evaluate(() => Data.club() && Data.club().id);
+  await p2.evaluate(() => {
+    Gate.reset('datos');
+    Data.setSession({ userId: 'u-junta', email: 'junta@esteclub.test' });
+    Shell.logout();
+  });
+  await e2(300);
+  const trasSalir = await p2.evaluate(() => ({
+    id: Data.club() && Data.club().id,
+    sesion: Data.ses,
+    vista: Shell.view
+  }));
+  comprobar('el club sobrevive a cerrar sesion', trasSalir.id === antesDeSalir,
+    `${antesDeSalir} -> ${trasSalir.id}`);
+  comprobar('pero la sesion si se cierra', trasSalir.sesion === null, String(trasSalir.sesion));
+
+  /* Telefono nuevo con la sincronizacion puesta: es como llega de verdad la
+     gente a la que se le da un codigo (una familia invitada). Sin club en local
+     y sin cuenta todavia. */
+  console.log('\n9. Telefono nuevo que entra con un codigo (modo nube)');
+  const p3 = await navegador2.newPage();
+  await p3.setViewport({ width: 412, height: 915 });
+  await p3.setRequestInterception(true);
+  p3.on('request', req => {
+    if (req.url().includes('jsdelivr') || req.url().includes('supabase')) {
+      return req.respond({ status: 200, contentType: 'text/javascript', body: '' });
+    }
+    req.continue();
+  });
+  const e3 = ms => new Promise(r => setTimeout(r, ms));
+  await p3.goto(`http://localhost:${PUERTO}/index.html`, { waitUntil: 'domcontentloaded' });
+  await p3.evaluate(() => { localStorage.clear(); });
+  await p3.reload({ waitUntil: 'domcontentloaded' });
+  await e3(2500);
+
+  const enNube = await p3.evaluate(() => backendListo());
+  comprobar('arranca con la sincronizacion activada', enNube === true, String(enNube));
+  comprobar('y sin club descargado todavia',
+    (await p3.evaluate(() => Data.clubExists())) === false);
+
+  /* Lo que contesta club_by_code(): identidad del club, temporada y el rol del
+     propio codigo. */
+  await p3.evaluate(() => {
+    Backend.clubPorCodigo = async () => ({
+      ok: true, club_id: 'srv_club_9', nombre: 'Rugby Club Cornella',
+      ciudad: 'Cornella', fundado: 1931, deporte: 'Rugby',
+      season_id: 'srv_season_9', temporada: '2026-27', rol: 'familia', team_id: null,
+    });
+  });
+
+  const hayBoton = await p3.evaluate(() => {
+    const b = [...document.querySelectorAll('button,a')]
+      .find(x => String(x.getAttribute('onclick') || '').includes("reset('codigo')"));
+    if (!b) return false;
+    b.click();
+    return true;
+  });
+  await e3(400);
+  comprobar('un movil sin cuenta puede escribir un codigo', hayBoton);
+  comprobar('y aparece el campo', await p3.evaluate(() => !!document.getElementById('gCode')));
+
+  await p3.evaluate(() => {
+    document.getElementById('gCode').value = 'ABC123';
+    return Gate.checkCode();
+  });
+  await e3(900);
+  const invitado = await p3.evaluate(() => ({
+    paso: Gate.step, rol: Gate.rolDetectado, club: Data.club(), season: Data.season(),
+    err: Gate.err || '',
+  }));
+  comprobar('el codigo le lleva a pedir sus datos',
+    invitado.paso === 'datos', `${invitado.paso} ${invitado.err}`);
+  comprobar('sabe de que rol va el alta', invitado.rol === 'familia', String(invitado.rol));
+  comprobar('copia el id real del club del servidor',
+    !!invitado.club && invitado.club.id === 'srv_club_9', invitado.club && invitado.club.id);
+  comprobar('copia la temporada, que si no la app se cae al entrar',
+    !!invitado.season && invitado.season.id === 'srv_season_9', JSON.stringify(invitado.season));
+
+  const pintado = await p3.evaluate(() => {
+    try { Shell.view = 'board'; Shell.render(); return { ok: true }; }
+    catch (e) { return { ok: false, err: e.message }; }
+  });
+  comprobar('las pantallas que usan la temporada no se rompen', pintado.ok, pintado.err || '');
+  await p3.close();
+
+  console.log('\n10. Errores de JavaScript en el viaje completo');
   const rel2 = errores2.filter(e => !/favicon|jsdelivr|supabase/i.test(e));
   if (rel2.length) [...new Set(rel2)].forEach(e => console.log('     - ' + e));
   comprobar('ningun error de JS en el viaje completo', rel2.length === 0,

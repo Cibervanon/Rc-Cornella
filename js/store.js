@@ -420,6 +420,34 @@ const Data = {
     return u;
   },
 
+  /** Deja el club anotado en local antes de darse de alta, para que un
+      dispositivo nuevo (sin club descargado) pueda completar el alta.
+
+      Los identificadores se copian TAL CUAL los manda el servidor. Si aqui se
+      inventase un id, al subir despues los datos se escribirian sobre un club
+      que no existe, y el movil real se quedaria sin verlos. Por eso los campos
+      que no sabemos (temporada activa, categorias) se dejan sin rellenar: los
+      traera la sincronizacion al entrar, no se inventan. */
+/* Un movil nuevo no tiene el club. Con un codigo valido el servidor nos dice
+     como se llama y que temporada esta activa, y se copia tal cual: si aqui se
+     inventase un id distinto, al subir los datos escribiria sobre un club que no
+     existe. La temporada tambien, porque Data.season() se usa en casi todas las
+     pantallas y sin ella la app se cae al entrar. */
+        seedClubDesdeServidor({ club_id, nombre, ciudad, fundado, deporte,
+                                season_id, temporada }){
+          const d = DB.load();
+          if(!d.club){
+            d.club = { id:club_id, nombre:nombre || 'Club', deporte:deporte || 'Rugby',
+              ciudad:(ciudad||'').trim(), fundado:fundado || 1931, creado:today() };
+          }
+          if(!d.season){
+            d.season = { id:season_id || (club_id + ':sea:1'),
+              nombre:(temporada||'').trim() || '2026-27', activa:true };
+          }
+          DB.save();
+          return d.club;
+        },
+
   login(email, password){
     const d = DB.load();
     const u = d.users.find(x=>x.email===(email||'').trim().toLowerCase());
