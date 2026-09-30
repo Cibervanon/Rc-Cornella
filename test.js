@@ -1341,6 +1341,31 @@ Backend.volcar().then(()=>{
   fail++;
 });
 
+// --- La bienvenida por rol lleva a tu siguiente acción ---
+// Es el patrón de las apps que triunfan: "Empezar" no es un botón de cortina.
+// La sesión anterior dejó un entrenador: la prueba de bienvenida pide junta.
+Data.endSession(); Data.login('junta@rcc.cat','nuevaclave1'); S={};
+let hoja20b = '';
+try{
+  global.document.querySelector = s => (s==='#sheetBody')
+    ? { set innerHTML(v){ hoja20b = v; }, get innerHTML(){ return hoja20b; },
+        querySelector:()=>null, classList:stub().classList }
+    : stub();
+  Shell.bienvenida();
+}catch(e){ console.log('   (bienvenida lanza: '+e.message+')'); }
+global.document.querySelector = () => stub();
+ok(hoja20b.indexOf('Entras como')>=0 && hoja20b.indexOf('<strong>')>=0,
+  'la bienvenida se pinta con el rol dentro (hoja: '+hoja20b.length+' chars)');
+const pend20b = Data.setupSteps().some(s=>!s.done);
+ok(pend20b
+  ? hoja20b.indexOf("goTab('panel')")>=0
+  : hoja20b.indexOf('onclick="closeSheet()"')>=0,
+  pend20b
+    ? 'como junta con pasos pendientes, "Empezar" te lleva al panel'
+    : 'como junta con todo hecho, "Empezar" solo cierra');
+ok(hoja20b.indexOf('onclick="closeSheet()"')>=0,
+  'siempre hay una forma de cerrar la hoja');
+
 /* El resumen se imprime desde 'exit' y no aqui: hay comprobaciones de
    sincronizacion que son promesas, y saldría antes de que terminen. */
 function resumen(){

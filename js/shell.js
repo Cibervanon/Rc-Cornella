@@ -131,6 +131,16 @@ const Shell = {
              'Consulta la hora de citación y el lugar',
              'Sigue tus objetivos y la valoración del entrenador']
     }[r] || [];
+    /* "Empezar" no cierra la hoja y ya está: te lleva a tu siguiente acción.
+       Es el patrón de las apps que triunfan — una sola llamada a la acción,
+       ligada al primer paso de tu rol, no un botón de cortina. */
+    let empezar = 'closeSheet()';
+    if(r==='familia' && !Family.esJugador() && Data.myPlayers().length===0)
+      empezar = 'closeSheet();Family.nuevoJugador()';
+    else if(r==='junta' && Data.setupSteps().some(s=>!s.done))
+      empezar = 'closeSheet();Shell.goTab(\'panel\')';
+    else if(r==='entrenador')
+      empezar = 'closeSheet();Shell.goTab(\'equipo\')';
     sheet('Bienvenido a '+Data.club().nombre, `
       <p style="margin:0 0 16px;line-height:1.6">Entras como
         <strong>${esc(ROLES[r].t.toLowerCase())}</strong>. Así funciona:</p>
@@ -138,7 +148,9 @@ const Shell = {
         <div class="sk"><span class="skb" style="background:var(--accent);
           border-color:var(--accent);font-size:11px;font-weight:700">${i+1}</span>
           <span>${esc(p)}</span></div>`).join('')}</div>
-      <button class="btn btn-accent" onclick="closeSheet()">Empezar</button>`);
+      <button class="btn btn-accent" onclick="${empezar}">${r==='familia'
+        && !Family.esJugador() && Data.myPlayers().length===0
+        ? 'Inscribir a tu hijo o hija' : 'Empezar'}</button>`);
   },
 
   go(v, st={}){
