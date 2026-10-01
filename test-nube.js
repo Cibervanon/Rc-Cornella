@@ -106,10 +106,14 @@ const fDr = aFila('drills',{ id:'dr_1', n:'Carrera', desc:'A', min:8 });
 ok(fDr.descripcion === 'A' && fDr.desc === undefined, 'drills: desc → descripcion');
 ok(fDr.min === 8, 'drills: los números se respetan');
 
-const fCat = aFila('categories',{ id:'cat_1', cuota:'', orden:2 });
-ok(fCat.cuota === null, 'números vacíos → null (si no, PostgreSQL rechaza el lote)');
-ok(fCat.orden === 2, 'números válidos se respetan');
-ok(aFila('categories',{ id:'cat_1', cuota:0 }).cuota === 0,
+/* El numero vacio se prueba con 'orden': la columna cuota ya no existe en el
+   servidor (la quitaron las migraciones 008 y 011), asi que probar ahi no
+   probaba nada. */
+const fCat = aFila('categories',{ id:'cat_1', orden:'' });
+ok(fCat.orden === null, 'números vacíos → null (si no, PostgreSQL rechaza el lote)');
+ok(aFila('categories',{ id:'cat_1', orden:2 }).orden === 2,
+  'números válidos se respetan');
+ok(aFila('categories',{ id:'cat_1', orden:0 }).orden === 0,
   'el cero NO se convierte en null');
 
 const fMat = aFila('matches',{ id:'m_1', titulares:[{ n:'x' }], puntos_favor:10, parte:'' });
@@ -258,7 +262,11 @@ tablas.posts = [];
   S('9. Cerrar sesión');
   await Backend.salir();
   ok(Backend.uid === null, 'se olvida el usuario');
-  ok(mem['rccornella.db.v1'] === undefined, 'se borra la copia local del club');
+  /* Cerrar sesion NO borra la copia local del club: en modo nube obligaba a
+   re-sincronizar todo y se perdia lo pendiente, y en modo local (sin nube a la
+   que volver) era perdida de datos. Para borrar el club esta DB.wipe(). */
+ok(mem['rccornella.db.v1'] !== undefined,
+  'la copia local del club se conserva al salir');
   ok(Backend.base.players === undefined, 'se olvida la base de sincronización');
   ok(DB.load() !== null, 'y DB.load() sigue funcionando para el modo local');
 

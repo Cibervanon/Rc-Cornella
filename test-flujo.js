@@ -32,8 +32,14 @@ const TIPOS = {
 };
 
 /* Servidor estatico minimo: la app necesita http:// (no file://) para que
-   funcionen fetch, service worker y el resto de APIs del navegador. */
-function servidor() {
+   funcionen fetch, service worker y el resto de APIs del navegador.
+
+   `sinNube` sirve js/config.js con la sincronizacion apagada. Sin esto el
+   recorrido se descarga el club de verdad del proyecto: en cuanto la junta
+   funda el club, el test empiezan a fallar porque la app ya no arranca vacia
+   y porque el club no se llama "Cornell...". Un test que depende de que el
+   proyecto este vacio no es un test. */
+function servidor(sinNube = false, puerto = PUERTO) {
   return new Promise(resolve => {
     const s = http.createServer((req, res) => {
       let rel = decodeURIComponent(req.url.split('?')[0]);
@@ -43,17 +49,65 @@ function servidor() {
           fs.statSync(destino).isDirectory()) {
         res.writeHead(404); res.end('no'); return;
       }
+      if (sinNube && rel === '/js/config.js') {
+        res.writeHead(200, { 'Content-Type': TIPOS['.js'] });
+        res.end(fs.readFileSync(destino, 'utf8')
+          .replace(/syncEnabled\s*:\s*true/, 'syncEnabled: false'));
+        return;
+      }
       res.writeHead(200, {
         'Content-Type': TIPOS[path.extname(destino)] || 'application/octet-stream',
       });
       fs.createReadStream(destino).pipe(res);
     });
-    s.listen(PUERTO, () => resolve(s));
+    s.listen(puerto, () => resolve(s));
   });
 }
 
 let ok = 0, fallos = 0;
 const problemas = [];
+
+/* Doble de supabase-js para la seccion de arranque en nube. Sin esto hace
+   falta la libreria de verdad del CDN: si no llega, `createClient` no existe,
+   el arranque cae en 'error' y `backendListo()` es false, con lo que la seccion
+   se cae sola y ademas dependeria de tener internet. Con el doble se prueba lo
+   que importa (que la app arranca con la sincronizacion puesta y pide los
+   datos cuando el codigo es valido) sin red y sin tocar el club de verdad.
+   Todo lo que responde es vacio o null, que es lo mismo que ve un movil nuevo
+   sin sesion. */
+const DOBLE_SUPABASE = `
+window.supabase = {
+  createClient: function(){
+    var q = function(){
+      var c = {
+        select: function(){return c}, eq: function(){return c}, in: function(){return c},
+        is: function(){return c}, order: function(){return c}, limit: function(){return c},
+        single: function(){return c}, maybeSingle: function(){return c},
+        insert: function(){return c}, update: function(){return c},
+        delete: function(){return c}, upsert: function(){return c},
+        then: function(r){ return Promise.resolve({ data: [], error: null }).then(r); },
+      };
+      return c;
+    };
+    var canal = { on: function(){return canal}, subscribe: function(){return canal},
+                  unsubscribe: function(){} };
+    return {
+      auth: {
+        getSession: async function(){ return { data: { session: null }, error: null }; },
+        getUser:    async function(){ return { data: { user: null }, error: null }; },
+        onAuthStateChange: function(){ return { data: { subscription: { unsubscribe: function(){} } } }; },
+        signOut: async function(){ return { error: null }; },
+      },
+      from: q,
+      rpc: async function(){ return { data: null, error: null }; },
+      functions: { invoke: async function(){ return { data: null, error: null }; } },
+      channel: function(){ return canal; },
+      removeChannel: function(){},
+    };
+  }
+};
+`;
+
 function comprobar(nombre, condicion, detalle = '') {
   if (condicion) { ok++; console.log(`  OK   ${nombre}`); }
   else {
@@ -69,7 +123,7 @@ function comprobar(nombre, condicion, detalle = '') {
     process.exit(1);
   }
 
-  const server = await servidor();
+  const server = await servidor(true);
   const navegador = await puppeteer.launch({
     executablePath: CHROME,
     headless: 'new',
@@ -309,7 +363,7 @@ function comprobar(nombre, condicion, detalle = '') {
   /* Se repite todo en una pagina nueva, esta vez en modo local: asi se
      comprueba el recorrido completo sin crear cuentas de verdad en el
      proyecto de Supabase del club. */
-  const server2 = await servidor();
+  const server2 = await servidor(true);
   const navegador2 = await puppeteer.launch({
     executablePath: CHROME, headless: 'new',
     args: ['--no-sandbox', '--disable-dev-shm-usage'],
@@ -580,17 +634,35 @@ function comprobar(nombre, condicion, detalle = '') {
      gente a la que se le da un codigo (una familia invitada). Sin club en local
      y sin cuenta todavia. */
   console.log('\n9. Telefono nuevo que entra con un codigo (modo nube)');
-  const p3 = await navegador2.newPage();
+  /* Navegador y puerto nuevos a proposito. En el mismo navegador que el
+     recorrido 7 ya hay un service worker instalado que se come las peticiones
+     antes que la interceptacion del navegador, asi que la config real no llegaria
+     nunca y esta seccion probaria lo mismo que la 7. */
+  const server3 = await servidor(false, PUERTO + 2);
+  const navegador3 = await puppeteer.launch({
+    executablePath: CHROME, headless: 'new',
+    args: ['--no-sandbox', '--disable-dev-shm-usage'],
+  });
+  const p3 = await navegador3.newPage();
   await p3.setViewport({ width: 412, height: 915 });
+  p3.on('pageerror', e => errores2.push('pageerror: ' + e.message));
+  p3.on('console', m => { if (m.type() === 'error') errores2.push('console: ' + m.text()); });
+  /* El doble se inyecta antes de que cargue nada: `cargarPaquete()` ve que ya
+     existe `window.supabase` y ni se molesta en pedirlo al CDN. Asi la seccion
+     no depende de tener internet. */
+  await p3.evaluateOnNewDocument(s => { new Function(s)(); }, DOBLE_SUPABASE);
   await p3.setRequestInterception(true);
+  /* Cinturon y tirantes: si algo se escapa, el API de Supabase no contesta. La
+     config que se sirve es la de verdad, sin tocar, y con esto la seccion no
+     puede tocar el club real ni aunque un dia se rompa el doble. */
   p3.on('request', req => {
-    if (req.url().includes('jsdelivr') || req.url().includes('supabase')) {
-      return req.respond({ status: 200, contentType: 'text/javascript', body: '' });
+    if (req.url().includes('supabase.co')) {
+      return req.respond({ status: 200, contentType: 'application/json', body: '[]' });
     }
     req.continue();
   });
   const e3 = ms => new Promise(r => setTimeout(r, ms));
-  await p3.goto(`http://localhost:${PUERTO}/index.html`, { waitUntil: 'domcontentloaded' });
+  await p3.goto(`http://localhost:${PUERTO + 2}/index.html`, { waitUntil: 'domcontentloaded' });
   await p3.evaluate(() => { localStorage.clear(); });
   await p3.reload({ waitUntil: 'domcontentloaded' });
   await e3(2500);
@@ -644,6 +716,8 @@ function comprobar(nombre, condicion, detalle = '') {
   });
   comprobar('las pantallas que usan la temporada no se rompen', pintado.ok, pintado.err || '');
   await p3.close();
+  await navegador3.close();
+  server3.close();
 
   console.log('\n10. Errores de JavaScript en el viaje completo');
   const rel2 = errores2.filter(e => !/favicon|jsdelivr|supabase/i.test(e));
