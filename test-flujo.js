@@ -76,16 +76,25 @@ const problemas = [];
    Todo lo que responde es vacio o null, que es lo mismo que ve un movil nuevo
    sin sesion. */
 const DOBLE_SUPABASE = `
+var CLUB = { id:'srv_club_9', nombre:'Rugby Club Cornella', ciudad:'Cornella',
+             fundado:1931, deporte:'Rugby', creado:'2026-01-01' };
+window.__rpcs = [];
 window.supabase = {
   createClient: function(){
-    var q = function(){
+    var q = function(t){
       var c = {
         select: function(){return c}, eq: function(){return c}, in: function(){return c},
         is: function(){return c}, order: function(){return c}, limit: function(){return c},
         single: function(){return c}, maybeSingle: function(){return c},
         insert: function(){return c}, update: function(){return c},
         delete: function(){return c}, upsert: function(){return c},
-        then: function(r){ return Promise.resolve({ data: [], error: null }).then(r); },
+        then: function(r){
+          /* La tabla del club es publica: al arrancar SIEMPRE baja, tenga o no
+             sesion. Un movil recien estrenado ya tiene el club en el disco, y
+             por eso el alta no puede decidir por Data.clubExists(). */
+          var filas = (t === 'clubs') ? [CLUB] : [];
+          return Promise.resolve({ data: filas, error: null }).then(r);
+        },
       };
       return c;
     };
@@ -93,13 +102,30 @@ window.supabase = {
                   unsubscribe: function(){} };
     return {
       auth: {
-        getSession: async function(){ return { data: { session: null }, error: null }; },
+        getSession: async function(){ return { data: { session: window.__sesion || null }, error: null }; },
         getUser:    async function(){ return { data: { user: null }, error: null }; },
         onAuthStateChange: function(){ return { data: { subscription: { unsubscribe: function(){} } } }; },
         signOut: async function(){ return { error: null }; },
+        /* Alta nueva: la sesion queda abierta, que es lo que hace Supabase si
+           el proyecto no pide confirmar el correo. */
+        signUp: async function(){
+          var s = { access_token:'tok_test_9', user:{ id:'u_nueva_9', email:'marta@example.com' } };
+          window.__sesion = s;
+          return { data: { user:s.user, session:s }, error: null };
+        },
       },
       from: q,
-      rpc: async function(){ return { data: null, error: null }; },
+      rpc: async function(nombre){
+        window.__rpcs.push(nombre);
+        if(nombre === 'consume_invite')
+          return { data: { ok:true, rol:'familia', team_id:null, club_id:'srv_club_9' }, error:null };
+        /* redeem_invite() exige sesion de verdad: el doble responde lo mismo
+           que el servidor para que el test notes si alguien la vuelve a usar
+           cuando no la hay. */
+        if(nombre === 'redeem_invite')
+          return { data: { ok:false, error:'Inicia sesión para comprobar el código' }, error:null };
+        return { data: null, error: null };
+      },
       functions: { invoke: async function(){ return { data: null, error: null }; } },
       channel: function(){ return canal; },
       removeChannel: function(){},
@@ -669,8 +695,14 @@ function comprobar(nombre, condicion, detalle = '') {
 
   const enNube = await p3.evaluate(() => backendListo());
   comprobar('arranca con la sincronizacion activada', enNube === true, String(enNube));
-  comprobar('y sin club descargado todavia',
-    (await p3.evaluate(() => Data.clubExists())) === false);
+  /* El club se descarga aunque no haya sesion (la tabla es publica), asi que un
+     movil de verdad empieza con el club ya en el disco. Este caso es el que se
+     rompia: el alta preguntaba con redeem_invite(), que exige sesion, y le
+     decia al invitado que inicie sesion cuando lo que tenia era que registrarse. */
+  comprobar('y con el club ya descargado, como en un movil de verdad',
+    (await p3.evaluate(() => Data.clubExists())) === true);
+  comprobar('pero sin sesion: todavia no hay cuenta',
+    (await p3.evaluate(() => Backend.uid)) === null);
 
   /* Lo que contesta club_by_code(): identidad del club, temporada y el rol del
      propio codigo. */
@@ -710,7 +742,39 @@ function comprobar(nombre, condicion, detalle = '') {
   comprobar('copia la temporada, que si no la app se cae al entrar',
     !!invitado.season && invitado.season.id === 'srv_season_9', JSON.stringify(invitado.season));
 
-  const pintado = await p3.evaluate(() => {
+  /* Y ahora el alta entera, que es donde el invitado se quedaba a medias con
+     un "Inicia sesion para comprobar el codigo": el codigo se comprobaba antes
+     de tener sesion. Ahora la cuenta se crea primero y el canje va con la sesion
+     ya abierta. */
+  await p3.evaluate(() => { window.__rpcs = []; });
+  await p3.type('#rN', 'Marta Soler Vidal', { delay: 5 });
+  await p3.evaluate(() => {
+    document.getElementById('rE').value = 'marta@example.com';
+    document.getElementById('rT').value = '600000000';
+    document.getElementById('rOk').checked = true;
+  });
+  await p3.type('#rP', 'clave-de-prueba-9', { delay: 5 });
+  await p3.evaluate(() => Gate.doRegister());
+  await e3(1200);
+  const alta = await p3.evaluate(() => ({
+    err: Gate.err || '', paso: Gate.step, rpcs: window.__rpcs.slice(),
+    rol: Data.rol(), ses: !!Data.ses, vista: Shell.view,
+    pantalla: document.body.innerText.replace(/\s+/g, ' '),
+  }));
+  comprobar('el alta se completa y entra en la app',
+    alta.err === '' && alta.vista === 'main',
+    alta.err || `vista:${alta.vista}`);
+  comprobar('aterriza en la bienvenida de su rol',
+    /FAMILIA/.test(alta.pantalla) && /Marta/.test(alta.pantalla),
+    alta.pantalla.slice(0, 60));
+  comprobar('entra con el rol que traia el codigo',
+    alta.rol === 'familia' && alta.ses === true, `${alta.rol} ses:${alta.ses}`);
+  comprobar('canjea el codigo con la sesion ya abierta',
+    alta.rpcs.includes('consume_invite'), alta.rpcs.join(','));
+  comprobar('y no vuelve a pedir sesion para comprobarlo',
+    !alta.rpcs.includes('redeem_invite'), alta.rpcs.join(','));
+
+const pintado = await p3.evaluate(() => {
     try { Shell.view = 'board'; Shell.render(); return { ok: true }; }
     catch (e) { return { ok: false, err: e.message }; }
   });
