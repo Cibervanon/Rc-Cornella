@@ -256,15 +256,21 @@ const Gate = {
     if(!c){ this.err='Escribe el código que te ha dado el club'; return Shell.render(); }
     this.busy = true; this.err = null; Shell.render();
     try{
-      /* Movil nuevo: no hay club en local y todavia no hay cuenta (la se crea en
-         el paso siguiente). redeem_invite() es una funcion de seguridad y pide
-         sesion, asi que aqui daria "Inicia sesion para comprobar el codigo" y
-         un invitado nuevo no tendria forma de pasar. Por eso, cuando no hay club
-         descargado, se pregunta con club_by_code(), que si acepta anon: comprueba
-         el codigo, dice de que rol va el alta y deja el club copiado del servidor
-         con sus ids, que si no al subir los datos escribiria sobre un club
-         inexistente. */
-      if(backendListo() && !Data.clubExists()){
+      /* Movil nuevo: no hay sesion todavia (la cuenta se crea en el paso
+         siguiente). redeem_invite() es una funcion de seguridad y pide sesion,
+         asi que aqui daria "Inicia sesion para comprobar el codigo" y un
+         invitado nuevo no tendria forma de pasar: ni puede registrarse ni tiene
+         cuenta con la que entrar. Cuando no hay sesion se pregunta con
+         club_by_code(), que si acepta anon: comprueba el codigo, dice de que rol
+         va el alta y deja el club copiado del servidor con sus ids, que si no al
+         subir los datos escribiria sobre un club inexistente.
+
+         Lo que decide el camino es la SESION, no que haya club en el movil. Al
+         arrancar, la nube descarga igualmente el club (la tabla es publica), de
+         modo que un movil recien estrenado ya lo tiene guardado y mirando solo
+         `Data.clubExists()` cualquier invitado caia en redeem_invite, que le
+         decia que inicie sesion: es decir, justo a quien no puede. */
+      if(backendListo() && (!Backend.uid || !Data.clubExists())){
         const club = await Backend.clubPorCodigo(c);
         if(!club || !club.ok){
           this.err = (club && club.error) || 'Ese código no existe';
@@ -367,9 +373,14 @@ const Gate = {
       if(backendListo()){
         // 1. Cuenta en Supabase Auth (si aún no la tenía, p. ej. con Google).
         // 2. Consumo del código en el servidor: es el paso que concede el rol.
-        const chk = await Backend.comprobarCodigo(this.invite.code);
-        if(!chk.ok) throw new Error(chk.error);
-
+        //
+        // El código ya se validó en el paso anterior (con club_by_code(), que
+        // acepta anónimo). Aquí NO se vuelve a pasar por redeem_invite(): esa
+        // función exige sesión y en este punto todavía no la hay, así que el
+        // alta se quedaba atascada en el primer uso — que es justamente cuando
+        // no hay cuenta — con un "Inicia sesión para comprobar el código". Por
+        // eso consume_invite() va DESPUÉS de registrar: ya hay sesión y además
+        // vuelve a validar caducidad y usos, que es lo que concede el rol.
         if(!this.pendienteGoogle){
           /* De `this.vPass`, no de val('rP'): el repintado de arriba ya ha
              vuelto a crear el campo y val('rP') vendria vacio. */
