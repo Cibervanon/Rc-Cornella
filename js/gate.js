@@ -30,9 +30,12 @@ const Gate = {
      Enter se notaba mucho: al darle a Intro la casilla de la contrasena se
      vaciaba sola. Esto vuelve a poner el valor DESPUES de repintar, de modo
      que la contrasena no llega a meterse en el HTML. */
-  repintar(id, valor){
+  repintar(id, valor, extra){
     Shell.render();
     if(id && valor){ const e = document.getElementById(id); if(e) e.value = valor; }
+    if(extra && extra.id){
+      const e2 = document.getElementById(extra.id); if(e2) e2.value = extra.valor||'';
+    }
   },
 
   /** Muestra u oculta la contrasena. El boton cambia de icono y de etiqueta
@@ -537,6 +540,10 @@ const Gate = {
       ${this.campoPass({ id:'fP', etiqueta:'Contraseña', autocomplete:'new-password',
       ayuda:'Mínimo 8 caracteres.',
       onenter:"if(event.key==='Enter')Gate.doFundar()" })}
+      ${this.campoPass({ id:'fA', etiqueta:'Código de administración del club',
+      autocomplete:'off',
+      ayuda:'Permiso para poder crear el club. Lo acuerda la junta directiva en persona. No es el código de familias ni el de invitation de jugadores.',
+      onenter:"if(event.key==='Enter')Gate.doFundar()" })}
       <button class="btn btn-accent" onclick="Gate.doFundar()" ${this.busy?'disabled':''}>
         ${this.busy?'Un momento…':'Crear el club'}</button>`;
   },
@@ -571,11 +578,23 @@ const Gate = {
        se guarda, para poder reintentar sin teclearla otra vez. */
     const nombre = val('fN'), email = val('fE'), password = valp('fP');
     this.vNombre = nombre; this.vEmail = email; this.vPass = password;
+    /* El codigo de administracion se lee igual que los demas campos, ANTES de
+       repintar, y se guarda para poder reintentar sin teclearlo otra vez. */
+    const codigo = val('fA');
+    this.vCodigo = codigo;
+    const fA = { id:'fA', valor:codigo };
     if(!this.vPass || password.length < 8){
       this.err = 'La contraseña debe tener al menos 8 caracteres';
-      return this.repintar('fP', password);
+      return this.repintar('fP', password, fA);
     }
-    this.busy = true; this.err = null; this.repintar('fP', password);
+    /* Sin codigo no se llega ni al servidor: fundar el club es lo unico que
+       protege este paso, y el fallo se explica aqui, no con un error generico. */
+    if(!codigo){
+      this.err = 'Falta el código de administración del club. Lo acuerda la '+
+        'junta directiva en persona; no es el código de familias.';
+      return this.repintar('fP', password, fA);
+    }
+    this.busy = true; this.err = null; this.repintar('fP', password, fA);
     (async () => {
       try{
         let userId = null, ids = null, familyCode = null;
@@ -599,7 +618,8 @@ const Gate = {
             p_temporada: this.asistente.club.temporada, p_user_id: userId,
             p_nombre_usuario: nombre, p_email: email,
             p_categorias: this.asistente.cats.map(c => ({ n:c.n })),
-            p_family_code: familyCode
+            p_family_code: familyCode,
+            p_codigo_admin: codigo
           });
         }
 
@@ -614,7 +634,7 @@ const Gate = {
         this.err = e.message || 'No se ha podido crear el club';
       }
       this.busy = false;
-      this.repintar('fP', password);
+      this.repintar('fP', password, { id:'fA', valor:codigo });
     })();
   }
 };

@@ -397,6 +397,12 @@ function comprobar(nombre, condicion, detalle = '') {
   await pon('#fN', 'Junta Directiva');
   await pon('#fE', 'junta@cor.test');
   await pon('#fP', 'contrasena123');
+  /* El codigo de administracion. En este viaje la app va en modo local, asi
+     que no se comprueba contra el servidor: se pone uno cualquiera y el campo
+     tiene que estar relleno, porque el navegador no deja fundar sin el. */
+  const pideCodigo = await p2.evaluate(() => !!document.getElementById('fA'));
+  comprobar('el ultimo paso pide el codigo de administracion', pideCodigo);
+  await pon('#fA', 'codigo-de-prueba-local');
   await click('Crear el club');
   await e2(700);
 

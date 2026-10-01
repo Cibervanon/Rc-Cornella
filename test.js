@@ -1403,6 +1403,39 @@ ok(Gate.step==='bienvenida' || Gate.step==='elegir',
   'sin sesion la puerta arranca por donde toca');
 DB.load().club = clubGuardado21; DB.guardar();
 
+/* El codigo de administracion para fundar el club ------------------------- */
+S_('Codigo de administracion al fundar');
+// El ultimo paso del asistente lo pide, tapado y con boton para verlo.
+Gate.asistente.n = 3;
+const hAdmin = Gate.fundar();
+ok(/id="fA"/.test(hAdmin), 'el ultimo paso pide el codigo de administracion');
+ok(/type="password"/.test(hAdmin), 'y va tapado');
+ok(/onclick="Gate\.verPass\('fA'/.test(hAdmin), 'con el boton para verlo');
+ok(/de administraci.n del club/i.test(hAdmin),
+  'el campo se identifica como del club, no como el de familias');
+
+// Sin codigo, no se intenta fundar nada y el error explica lo que falta.
+Gate.asistente = { n:3, club:{ nombre:'RC Prueba', ciudad:'Prueba', temporada:'2026-27' },
+  cats:[{ n:'General' }] };
+Gate.err = null; Gate.busy = false;
+F({ fN:'Probador', fE:'probador@ejemplo.local', fP:'ClaveLarga123', fA:'   ' });
+Gate.doFundar();
+ok(/c.digo de administraci.n/i.test(Gate.err||''),
+  'sin codigo se explica que falta el codigo');
+ok(Gate.busy!==true, 'y no se queda con el club a medias creado');
+ok(Gate.asistente.n===3, 'y sigue en el ultimo paso, para poder reintentar');
+
+// El codigo viaja al servidor: la comprobacion de verdad no es del navegador.
+ok(/p_codigo_admin/.test(fs.readFileSync(__dirname+'/js/gate.js','utf8')),
+  'el codigo se envia al servidor en p_codigo_admin');
+const fuenteApp = fs.readFileSync(__dirname+'/js/gate.js','utf8')
+  + fs.readFileSync(__dirname+'/js/backend.js','utf8');
+ok(!/codigo[_-]?admin\s*[:=]\s*['"][^'"]+/i.test(fuenteApp),
+  'la app no lleva el codigo de administracion escrito dentro');
+const sql008 = fs.readFileSync(__dirname+'/supabase/migrations/20260101000800_codigo_fundacion.sql','utf8');
+ok(!/insert into public\.app_config[\s\S]{0,200},\s*'[^']{3,}'/i.test(sql008),
+  'el valor tampoco esta en las migraciones: vive solo en la base de datos');
+
 /* El resumen se imprime desde 'exit' y no aqui: hay comprobaciones de
    sincronizacion que son promesas, y saldría antes de que terminen. */
 function resumen(){

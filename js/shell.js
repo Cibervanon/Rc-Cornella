@@ -54,9 +54,8 @@ const Shell = {
         <h1>Pon tu nueva contraseña</h1>
         <div class="gate-est">${esc(Data.club().nombre||'Rugby Club Cornellà')}</div>
       </div><div class="gate-body"><div class="gate-inner">
-        <div class="f"><label for="rE1">Nueva contraseña</label>
-          <input class="in" id="rE1" type="password" autocomplete="new-password">
-          <div class="help">Mínimo 8 caracteres.</div></div>
+        ${Gate.campoPass({ id:'rE1', etiqueta:'Nueva contraseña',
+          autocomplete:'new-password', ayuda:'Mínimo 8 caracteres.' })}
         <button class="btn btn-accent" onclick="Shell.guardarPassRecuperacion()">
           Guardar contraseña</button>
         <div class="links">
@@ -215,13 +214,12 @@ const Shell = {
   cambiarPass(){
     const conNube = backendListo();
     sheet('Cambiar la contraseña', `
-      ${conNube ? '' : `<div class="f"><label for="pA">Contraseña actual</label>
-        <input class="in" id="pA" type="password" autocomplete="current-password"></div>`}
-      <div class="f"><label for="pN2">Nueva contraseña</label>
-        <input class="in" id="pN2" type="password" autocomplete="new-password">
-        <div class="help">Mínimo 8 caracteres.</div></div>
-      ${conNube ? `<div class="f"><label for="pN3">Repite la nueva contraseña</label>
-        <input class="in" id="pN3" type="password" autocomplete="new-password"></div>` : ''}
+      ${conNube ? '' : Gate.campoPass({ id:'pA', etiqueta:'Contraseña actual',
+        autocomplete:'current-password' })}
+      ${Gate.campoPass({ id:'pN2', etiqueta:'Nueva contraseña',
+        autocomplete:'new-password', ayuda:'Mínimo 8 caracteres.' })}
+      ${conNube ? Gate.campoPass({ id:'pN3', etiqueta:'Repite la nueva contraseña',
+        autocomplete:'new-password' }) : ''}
       <button class="btn" onclick="Shell.guardarPass()">Guardar</button>`);
   },
   async guardarPass(){
